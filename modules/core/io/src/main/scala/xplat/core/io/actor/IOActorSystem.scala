@@ -22,10 +22,11 @@ final case class IOActorSystem[F[_]](private val context: Context[F, Nothing], o
     context.spawn(name)(builder)
   }
 
-  override def schedule[T](f: => F[T], delay: FiniteDuration): F[Cancelable[F]] = ???
+  override def schedule[T](f: => F[T], delay: FiniteDuration): F[Cancelable[F]] = {
+    A.start(A.sleep(delay) >> f).map(f => () => f.cancel)
+  }
 
   override def terminate(): F[Unit] = {
-
     for {
       _ <- context.stop
       _ <- onShutdownAll.get
@@ -104,10 +105,14 @@ object IOActorSystem {
 
   object State {
 
-    def fold[F[_], T](state: State[F, T], behavior: Behavior[F, T])(implicit A: Async[F]): F[State[F, T]] = {
+    private def fold[F[_], T](state: State[F, T], behavior: Behavior[F, T])(implicit A: Async[F]): F[State[F, T]] = {
       behavior match {
         case Behavior.Wrapper(effect) =>
-          effect.flatMap(b => fold(state, b))
+          handleError[F, Behavior[F, T], T](
+            effect,
+            state,
+            b => fold(state, b)
+          )
         case Behavior.OnMessage(f) =>
           A.pure(state.withBehavior(Behavior.OnMessage(f)))
         case Behavior.OnContext(f) =>
@@ -116,10 +121,30 @@ object IOActorSystem {
         case Behavior.Stop() =>
           state.withBehavior(behavior).pure[F]
         case Behavior.OnSignal(f, nested) =>
-          val next = state.withSignalHandler(f)
+          val next: State[F, T] = state.withSignalHandler(f)
           fold(next, nested)
         case _ =>
           A.pure(state)
+      }
+    }
+
+    private def handleError[F[_], T, A](f: => F[T], state: State[F, A], onSuccess: T => F[State[F, A]])(implicit A: Async[F]): F[State[F, A]] = {
+
+      f.flatMap(onSuccess).recoverWith { error =>
+        val signal: Signal = Signal.OnError(error)
+        val isDefined: Boolean = state.signalHandler.isDefinedAt(signal)
+
+        if (isDefined) {
+          A
+            .delay(state.signalHandler(signal))
+            .flatMap(b => fold(state, b))
+            .recoverWith { error =>
+              state.context.log.error(error.getLocalizedMessage, error) >>
+                State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+            }
+        } else {
+          State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+        }
       }
     }
 
@@ -133,13 +158,13 @@ object IOActorSystem {
         extends State[F, T] {
 
       def setup(): F[State[F, T]] = {
-        fold(this, behavior).map(s => Running[F, T](s.behavior, s.context, s.notifyShutdownDone, s.children, s.signalHandler))
+        fold(this, behavior).flatMap(s => Running[F, T](s.behavior, s.context, s.notifyShutdownDone, s.children, s.signalHandler).setup())
       }
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = A.pure(this)
     }
 
-    final case class Running[F[_], T](
+    private final case class Running[F[_], T](
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
@@ -167,7 +192,7 @@ object IOActorSystem {
             Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
           case AddChild(name, onBuild, onError) =>
             if (children.contains(name)) {
-              onError.complete(new Exception(s"children exists $name")).as(this)
+              onError.complete(new Exception(s"children $name exists")).as(this)
             } else {
               onBuild.map { link =>
                 this.modify(_.children).using(xs => xs + (name -> link))
@@ -188,12 +213,20 @@ object IOActorSystem {
           case Same() =>
             state.pure[F]
           case Wrapper(effect) =>
-            effect.flatMap(b => onSignal(signal, state, b))
+            handleError[F, Behavior[F, T], T](
+              effect,
+              state,
+              b => onSignal(signal, state, b)
+            )
           case Behavior.OnMessage(f) =>
             state.withBehavior(Behavior.OnMessage(f)).pure[F]
           case Behavior.OnSignal(f, nested) =>
             if (f.isDefinedAt(signal)) {
-              fold(state.withSignalHandler(f), f(signal))
+              handleError[F, Behavior[F, T], T](
+                A.delay(f(signal)),
+                state,
+                b => fold(state.withSignalHandler(f), b)
+              )
             } else {
               fold(state.withSignalHandler(f), nested)
             }
@@ -202,9 +235,12 @@ object IOActorSystem {
 
       private def onMessage(message: T, state: State[F, T], behavior: Behavior[F, T]): F[State[F, T]] = {
         behavior match {
-          case Behavior.OnMessage(f) =>
-            val next: Behavior[F, T] = f(message)
-            fold(state.withBehavior(behavior), next)
+          case item: Behavior.OnMessage[F, T] =>
+            handleError[F, Behavior[F, T], T](
+              A.delay(item.func(message)),
+              state,
+              next => fold(state.withBehavior(behavior), next)
+            )
           case Behavior.OnContext(f) =>
             val next: Behavior[F, T] = f(context)
             onMessage(message, state, next)
@@ -213,7 +249,11 @@ object IOActorSystem {
           case Behavior.Stop() =>
             Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
           case Behavior.Wrapper(effect) =>
-            effect.flatMap(b => onMessage(message, state, b))
+            handleError[F, Behavior[F, T], T](
+              effect,
+              state,
+              b => onMessage(message, state, b)
+            )
           case _ =>
             A.pure(state)
         }
@@ -221,7 +261,7 @@ object IOActorSystem {
 
     }
 
-    final case class Terminated[F[_], T](
+    private final case class Terminated[F[_], T](
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],

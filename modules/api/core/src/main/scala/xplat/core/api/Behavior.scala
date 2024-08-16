@@ -7,9 +7,9 @@ sealed trait Behavior[F[_], T] {
 }
 
 object Behavior {
-  final case class OnMessage[F[_], T](f: T => Behavior[F, T]) extends Behavior[F, T]
-  final case class OnContext[F[_], T](f: Context[F, T] => Behavior[F, T]) extends Behavior[F, T]
-  final case class OnSignal[F[_], T](f: PartialFunction[Signal, Behavior[F, T]], nested: Behavior[F, T]) extends Behavior[F, T]
+  final case class OnMessage[F[_], T](func: T => Behavior[F, T]) extends Behavior[F, T]
+  final case class OnContext[F[_], T](func: Context[F, T] => Behavior[F, T]) extends Behavior[F, T]
+  final case class OnSignal[F[_], T](func: PartialFunction[Signal, Behavior[F, T]], nested: Behavior[F, T]) extends Behavior[F, T]
   final case class Same[F[_], T]() extends Behavior[F, T]
   final case class Stop[F[_], T]() extends Behavior[F, T]
   final case class Wrapper[F[_], T](effect: F[Behavior[F, T]]) extends Behavior[F, T]

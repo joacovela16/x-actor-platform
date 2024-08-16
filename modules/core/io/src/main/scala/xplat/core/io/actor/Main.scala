@@ -23,6 +23,7 @@ object Main extends IOApp {
           b.same
         }
       }
+     // ref1 <- as.spawn[Int]("a1")(_.same)
       _ <- (0 until 100).toList.map(x => ref ! x).sequence_
       _ <- as.terminate()
     } yield ExitCode.Success
