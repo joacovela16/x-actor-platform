@@ -9,5 +9,5 @@ trait ActorSystem[F[_]] {
 }
 
 object ActorSystem {
-  def apply[F[_]](implicit as: ActorSystem[F]): ActorSystem[F] = as
+  def apply[F[_]](implicit as: F[ActorSystem[F]]): as.type = as
 }

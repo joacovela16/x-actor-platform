@@ -1,0 +1,44 @@
+<configuration>
+
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ} %p %m%n"/>
+    <property name="APP_LOG_ROOT" value="admin-logs"/>
+
+    <timestamp key="year" datePattern="yyyy"/>
+    <timestamp key="month" datePattern="MM"/>
+    <timestamp key="date" datePattern="dd"/>
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%-5relative %-5level %logger{35} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+            <appender-ref ref="FILE"/>
+        </appender>
+
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>notariox.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>notariox.%d{yyyy-MM-dd}.log</fileNamePattern>
+                <maxHistory>120</maxHistory>
+            </rollingPolicy>
+
+            <encoder>
+                <pattern>%logger{35} -%kvp -%msg%n</pattern>
+            </encoder>
+        </appender>
+    -->
+
+    <!--    <root level="DEBUG">-->
+    <!--        <appender-ref ref="FILE"/>-->
+    <!--    </root>-->
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT"/>
+    </root>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+</configuration>

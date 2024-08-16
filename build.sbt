@@ -7,10 +7,14 @@ ThisBuild / organizationName := "x-actor-platform"
 
 val commonsSettings = Seq(
   libraryDependencies ++= Seq(
+    // https://mvnrepository.com/artifact/com.lihaoyi/scalasql
+    "com.lihaoyi" %% "scalasql" % "0.1.5",
     Dependencies.Compile.pprint,
     Dependencies.Compile.quicklens,
     Dependencies.Compile.catsSelfLogger,
     Dependencies.Compile.slf4j,
+    Dependencies.Compile.logbackClassic,
+    Dependencies.Compile.logbackCore,
     Dependencies.Compile.catsMtl,
     Dependencies.Test.scalaTest,
     Dependencies.Test.catTest
