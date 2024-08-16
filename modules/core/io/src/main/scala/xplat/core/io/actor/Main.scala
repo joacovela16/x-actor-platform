@@ -1,10 +1,10 @@
 package xplat.core.io.actor
 
 import cats.effect.{ExitCode, IO, IOApp}
-import xplat.core.api.ActorSystem
-import xplat.core.io.actor.IOActorSystem._
-import cats.effect.implicits._
 import cats.implicits._
+import xplat.core.api.{ActorSystem, Signal}
+import xplat.core.io.actor.IOActorSystem._
+
 object Main extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] = {
@@ -14,14 +14,16 @@ object Main extends IOApp {
       ref <- as.spawn[Int]("a1") { b =>
         b.message { n =>
           println(n)
-          if (n > 10){
+          if (n > 10) {
             b.stop
-          }else{
+          } else {
             b.same
           }
+        }.onSignal { case Signal.OnError(throwable) =>
+          b.same
         }
       }
-      _ <- (0 until 100).toList.map(x=>ref ! x).sequence_
+      _ <- (0 until 100).toList.map(x => ref ! x).sequence_
       _ <- as.terminate()
     } yield ExitCode.Success
   }
