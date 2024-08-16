@@ -9,5 +9,5 @@ trait Context[F[_], T] {
   def signal(signal: Signal): F[Unit]
   def stopChild(name: String): F[Unit]
   def log: Logger[F]
-  def stop:F[Unit]
+  def stop():F[Unit]
 }

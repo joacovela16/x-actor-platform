@@ -4,7 +4,7 @@ import scala.concurrent.duration.FiniteDuration
 
 final case class Behaviors[F[_], T](dummy: Boolean = true) {
   def message(f: T => Behavior[F, T]): Behavior[F, T] = Behavior.OnMessage(f)
-  def setup(f: Context[F, T] => Behavior[F, T]): Behavior[F, T] = Behavior.OnContext(f)
+  def context(f: Context[F, T] => Behavior[F, T]): Behavior[F, T] = Behavior.OnContext(f)
 
   def stash(size: Int)(f: Stash[F, T] => Behavior[F, T])(implicit as: ActorSystem[F]): Behavior[F, T] = {
     ???

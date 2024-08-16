@@ -14,7 +14,7 @@ object Main extends IOApp {
       ref <- as.spawn[Int]("a1") { b =>
         b.message { n =>
           println(n)
-          if (n > 10) {
+          if (n > 0) {
             b.stop
           } else {
             b.same
@@ -23,8 +23,16 @@ object Main extends IOApp {
           b.same
         }
       }
-     // ref1 <- as.spawn[Int]("a1")(_.same)
-      _ <- (0 until 100).toList.map(x => ref ! x).sequence_
+      ref1 <- as.spawn[Int]("a2") { b =>
+        b.context { _ =>
+          throw new Exception("test")
+        }.onSignal { case Signal.OnError(throwable) =>
+          b.context { c =>
+            c.log.info("Custom stop") as b.stop
+          }
+        }
+      }
+      _ <- (0 until 1000).toList.map(x => ref ! x).sequence_
       _ <- as.terminate()
     } yield ExitCode.Success
   }
