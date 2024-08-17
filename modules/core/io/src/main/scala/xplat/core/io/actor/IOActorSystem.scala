@@ -13,6 +13,7 @@ import xplat.core.api.Behavior.{OnContext, Same, Wrapper}
 import xplat.core.api._
 import xplat.core.io.actor.IOActorSystem.Command.{AddChild, ChildDown, OnMessage, OnSignal, Stop, StopChild}
 
+import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
@@ -41,7 +42,7 @@ object IOActorSystem {
   def apply[F[_]](name: String)(implicit A: Async[F]): F[ActorSystem[F]] = {
     for {
       d <- Deferred[F, Unit]
-      root <- Actor[F, Nothing](name, Behaviors[F, Nothing]().same, Seq("xplat"), d.complete(()).void)
+      root <- Actor[F, Nothing](name, IOBehaviors[F, Nothing]().same, Seq("xplat"), d.complete(()).void)
     } yield IOActorSystem(root._2, d)
   }
 
@@ -59,12 +60,8 @@ object IOActorSystem {
     final case class StopChild[F[_], T](name: String) extends Command[F, T]
     final case class ChildDown[F[_], T](name: String) extends Command[F, T]
     final case class Stop[F[_], T]() extends Command[F, T]
-
-    final case class AddChild[F[_], T](
-        name: String,
-        onBuild: F[Link[F]],
-        onError: Deferred[F, Throwable]
-    ) extends Command[F, T]
+    final case class IsAllowed[F[_], T](onBuild: F[Command[F, T]], onError: Deferred[F, Throwable]) extends Command[F, T]
+    final case class AddChild[F[_], T](name: String, onBuild: F[Link[F]], onError: Deferred[F, Throwable]) extends Command[F, T]
 
     implicit def fromT[F[_], T](value: T): Command[F, T] = OnMessage(value)
     implicit def fromSignal[F[_], T](value: Signal): Command[F, T] = OnSignal(value)
@@ -184,6 +181,8 @@ object IOActorSystem {
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
+          case Command.IsAllowed(onBuild, onError) =>
+            onBuild >>= (c => reduce(c))
           case OnMessage(message) =>
             onMessage(message, this, behavior)
           case OnSignal(signal) =>
@@ -288,25 +287,28 @@ object IOActorSystem {
       def setup(): F[State[F, T]] = {
 
         if (children.isEmpty) {
-          notifyShutdownDone.start.as(this.withBehavior(Behavior.Stop())) <* context.log.info(s"Actor ${context.path} is down")
+          notifyShutdownDone.as(this.withBehavior(Behavior.Stop()))
         } else {
           context.log.info(s"Starting shuting down actor ${context.path}") >>
-            children.values.map(x => x.requestShutdown).toList.sequence_.start.as(this.withBehavior(Behavior.Stop()))
+            children.values.map(x => x.requestShutdown).toList.sequence_.as(this.withBehavior(Behavior.Stop()))
         }
       }
 
       def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
+          case Command.IsAllowed(_, onError) =>
+            onError.complete(new Exception(s"Actor ${context.path} already stopped")).as(this)
           case ChildDown(name) =>
             val next: State[F, T] = this.modify(_.children).using(_ - name)
-            val lastTask = if (next.children.isEmpty) {
-              notifyShutdownDone.start.as(next) <* context.log.info(s"Actor ${context.path} is down")
+            val lastTask: F[State[F, T]] = if (next.children.isEmpty) {
+              notifyShutdownDone.as(next)
             } else {
               next.pure[F]
             }
 
-            lastTask <* context.log.info(s"Child down $name")
+            lastTask
           case other =>
+            println(other)
             A.pure(this)
         }
       }
@@ -315,42 +317,104 @@ object IOActorSystem {
 
   }
 
-  final case class IOContext[F[_], T](private val actor: Actor[F, T], log: Logger[F])(implicit A: Async[F]) extends Context[F, T] {
+  private final case class IOStash[F[_], T](private val queue: Queue[F, T], context: Context[F, T])(implicit A: Async[F]) extends Stash[F, T] {
+    override def isEmpty: F[Boolean] = queue.size map (_ == 0)
+
+    override def size(): F[Int] = queue.size
+
+    override def push(message: T): F[Unit] = queue.tryOffer(message).void
+
+    override def unstashAll(): F[Unit] = {
+      queue.tryTakeN(None) >>= { xs =>
+        xs.traverse_(x => context.pipe(x))
+      }
+    }
+
+    override def unstashAll(b: => Behavior[F, T]): F[Behavior[F, T]] = unstashAll().as(b)
+  }
+
+  private object IOStash {
+
+    def apply[F[_]: Async, T](context: Context[F, T], size: Int): F[Stash[F, T]] = {
+      if (size == 0) {
+        Queue.unbounded[F, T].map(q => IOStash(q, context))
+      } else {
+        Queue.bounded[F, T](size).map(q => IOStash(q, context))
+      }
+    }
+
+  }
+
+  private final case class IOBehaviors[F[_], T]()(implicit A: Async[F]) extends Behaviors[F, T] {
+
+    override def stash(size: Int)(f: Stash[F, T] => Behavior[F, T]): Behavior[F, T] = {
+      context(c => IOStash[F, T](c, size) map (x => f(x)))
+    }
+
+    override def timer(time: FiniteDuration, message: T)(f: Cancelable[F] => Behavior[F, T]): Behavior[F, T] = {
+      context(c => c.schedule(c.pipe(message), time) map f)
+    }
+
+  }
+
+  private final case class IOContext[F[_], T](private val actor: Actor[F, T], log: Logger[F])(implicit A: Async[F]) extends Context[F, T] {
     override def name: String = actor.name
     override def path: String = actor.path
     override def self: ActorRef[F, T] = actor
+    override def spawn[A](name: String)(b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = actor.spawn(name, b)
+    override def pipe(msg: T): F[Unit] = actor.send(msg)
+    override def signal(signal: Signal): F[Unit] = actor.signal(signal)
+    override def stopChild(name: String): F[Unit] = actor.stopChild(name)
+    override def stop(): F[Unit] = actor.stop()
 
-    override def spawn[A](name: String)(b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = {
-      actor.spawn(name, b(Behaviors()))
+    override def schedule[A](f: => F[A], delay: FiniteDuration): F[Cancelable[F]] = {
+      A.start(A.sleep(delay) >> f).map(f => () => f.cancel)
     }
 
-    override def pipe(msg: T): F[Unit] = actor.push(msg)
-    override def signal(signal: Signal): F[Unit] = actor.push(signal)
-    override def stopChild(name: String): F[Unit] = actor.push(Command.StopChild(name))
-
-    override def stop(): F[Unit] = actor.stop()
   }
 
   final case class Actor[F[_], T](
       name: String,
       parentPath: Seq[String],
-      queue: Queue[F, Command[F, T]],
-      isDown: F[Boolean]
+      queue: Queue[F, Command[F, T]]
   )(implicit A: Async[F])
       extends ActorRef[F, T] {
     self =>
     private lazy val _path = s"${parentPath.mkString("/")}/$name"
 
-    def push(cmd: Command[F, T]): F[Unit] = {
-      isDown >>= { down =>
-        if (down) A.unit
-        else queue.offer(cmd)//.start.void
-      }
+    private def checkState(cmd: Command[F, T]): F[Unit] = {
+      for {
+        onBuild <- Deferred[F, Unit]
+        onError <- Deferred[F, Throwable]
+        _ <- queue.offer(
+          Command.IsAllowed(
+            onBuild.complete(()).as(cmd),
+            onError
+          )
+        )
+        _ <- A.race(onError.get, onBuild.get).flatMap {
+          case Left(value) => A.raiseError[Unit](value)
+          case _           => A.unit
+        }
+      } yield ()
+
     }
 
-    def stop(): F[Unit] = push(Command.Stop())
+    private def push(cmd: Command[F, T]): F[Unit] = {
+      queue.offer(cmd)
+    }
 
-    def spawn[A](name: String, b: Behavior[F, A]): F[ActorRef[F, A]] = {
+    def stopChild(name: String): F[Unit] = {
+      checkState(Command.StopChild(name))
+    }
+
+    def signal(signal: Signal): F[Unit] = {
+      checkState(Command.OnSignal(signal))
+    }
+
+    def stop(): F[Unit] = checkState(Command.Stop())
+
+    def spawn[A](name: String, b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = {
       Async[F].async { resolve =>
         for {
           onBuild <- Deferred[F, Actor[F, A]]
@@ -360,7 +424,7 @@ object IOActorSystem {
               name,
               Actor[F, A](
                 name,
-                b,
+                b(IOBehaviors()),
                 parentPath :+ self.name,
                 push(Command.ChildDown(name))
               ) >>= { case (actorRef, _) =>
@@ -385,9 +449,33 @@ object IOActorSystem {
 
     override def path: String = _path
 
-    override def ask[A](f: ActorRef[F, A] => T, timeout: FiniteDuration): F[A] = ???
+    override def ask[A](f: ActorRef[F, A] => T, timeout: FiniteDuration): F[A] = {
+      for {
+        onMessage <- Deferred[F, A]
+        ref <- spawn[A](
+          UUID.randomUUID().toString,
+          b => {
+            b.message { m =>
+              onMessage.complete(m).as(b.stop)
+            }
+          }
+        )
+        _ <- send(f(ref))
+        result <- A
+          .race(A.sleep(timeout) >> A.pure(new Exception("Ask timeout")), onMessage.get)
+          .flatMap {
+            case Left(value) =>
+              A.raiseError[A](value)
+            case Right(value) =>
+              A.pure(value)
+          }
+      } yield result
+    }
 
-    override def send(msg: T): F[Unit] = push(msg)
+    override def send(msg: T): F[Unit] = {
+      checkState(msg)
+    }
+
   }
 
   object Actor {
@@ -402,7 +490,7 @@ object IOActorSystem {
       for {
         queue <- Queue.bounded[F, Command[F, T]](10)
         shutdownSignal <- SignallingRef[F].of(false)
-        actor = Actor[F, T](name, parentPath, queue, shutdownSignal.get)
+        actor = Actor[F, T](name, parentPath, queue)
         logLib <- Slf4jLogger.fromName[F](actor.path)
         log = IOLogger.build(logLib)
         context = IOContext[F, T](actor, log)
@@ -411,15 +499,15 @@ object IOActorSystem {
           .Init[F, T](
             behavior,
             context,
-            shutdownSignal.set(true) >> log.info(s"Calling down ${context.path}")  >> notifyShutdown,
+            /*shutdownSignal.set(true) >>*/ context.log.info(s"Actor ${context.path} is down") >> notifyShutdown,
             Map.empty,
             defaultHandler
           )
           .setup()
         _ <- Stream
-          .fromQueueUnterminated(queue, 10)
-          .interruptWhen(shutdownSignal)
+          .fromQueueUnterminated(queue, 1)
           .evalScan[F, State[F, T]](initState)(_ reduce _)
+          //  .interruptWhen(shutdownSignal)
           .compile
           .drain
           .start
