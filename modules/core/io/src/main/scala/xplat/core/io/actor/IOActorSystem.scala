@@ -320,9 +320,7 @@ object IOActorSystem {
             A.pure(this)
         }
       }
-
     }
-
   }
 
   private final case class IOStash[F[_], T](private val queue: Queue[F, T], context: Context[F, T])(implicit A: Async[F]) extends Stash[F, T] {
