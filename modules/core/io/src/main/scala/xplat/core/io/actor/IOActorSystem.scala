@@ -491,7 +491,7 @@ object IOActorSystem {
 
         _ <- channel.stream
           .evalScan[F, State[F, T]](initState)(_ reduce _)
-          .onFinalize(context.log.info(s"Actor ${context.path} is down 2") >> notifyShutdown)
+          .onFinalize(context.log.info(s"Actor ${context.path} is down") >> notifyShutdown)
           .compile
           .drain
           .start
