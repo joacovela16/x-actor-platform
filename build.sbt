@@ -12,9 +12,9 @@ val commonsSettings = Seq(
     Dependencies.Compile.pprint,
     Dependencies.Compile.quicklens,
     Dependencies.Compile.catsSelfLogger,
-    Dependencies.Compile.slf4j,
+//    Dependencies.Compile.slf4j,
     Dependencies.Compile.logbackClassic,
-    Dependencies.Compile.logbackCore,
+//    Dependencies.Compile.logbackCore,
     Dependencies.Compile.catsMtl,
     Dependencies.Test.scalaTest,
     Dependencies.Test.catTest
@@ -36,8 +36,8 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
   )
 
 lazy val ioActor = (project in file("./modules/core/io"))
-  .aggregate(coreAPI)
-  .dependsOn(coreAPI)
+  .aggregate(coreAPI, corePersistence)
+  .dependsOn(coreAPI, corePersistence)
   .settings(
     name := "io-actor",
     commonsSettings,

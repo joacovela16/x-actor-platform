@@ -7,7 +7,6 @@ object Dependencies {
     val quicklens: String = "1.9.6"
     val chill: String = "0.10.0"
 
-
     val circe: String = "0.14.9"
     val sourceCode: String = "0.4.2"
     val config: String = "1.4.2"
