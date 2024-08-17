@@ -19,20 +19,24 @@ object Main extends IOApp {
           }
         }
 
-        sum(0).onSignal { case Signal.OnError(throwable) =>
-          b.same
+        b.message{n =>
+          println(n)
+          if (n < 10){
+            b.same
+          }else
+            b.stop
         }
       }
-      ref1 <- as.spawn[Int]("a2") { b =>
+      /*ref1 <- as.spawn[Int]("a2") { b =>
         b.context { _ =>
-          b.same
+          throw new Exception(">>")
         }.onSignal { case Signal.OnError(throwable) =>
           b.context { c =>
-            c.log.info("Custom stop") as b.stop
+            c.log.error(throwable.getLocalizedMessage, throwable) as b.stop
           }
         }
-      }
-      _ <- (1 until 11).toList.map(x => ref ! x).sequence_
+      }*/
+      _ <- (1 until 8).toList.map(x => ref ! x).sequence_
       _ <- as.terminate()
     } yield ExitCode.Success
   }

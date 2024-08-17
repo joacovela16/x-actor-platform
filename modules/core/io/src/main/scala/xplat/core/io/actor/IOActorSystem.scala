@@ -5,8 +5,7 @@ import cats.effect.kernel.{Async, Deferred}
 import cats.effect.std.Queue
 import cats.implicits._
 import com.softwaremill.quicklens.ModifyPimp
-import fs2.Stream
-import fs2.concurrent.SignallingRef
+import fs2.concurrent.Channel
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api.Behavior.{OnContext, Same, Wrapper}
@@ -113,7 +112,7 @@ object IOActorSystem {
             b => fold(state, b)
           )
         case Behavior.OnMessage(f) =>
-          A.pure(state.withBehavior(Behavior.OnMessage(f)))
+          A.delay(state.withBehavior(Behavior.OnMessage(f)))
         case Behavior.OnContext(f) =>
           handleError[F, Behavior[F, T], T](
             A.delay(f(state.context)),
@@ -126,7 +125,7 @@ object IOActorSystem {
           val next: State[F, T] = state.withSignalHandler(f)
           fold(next, nested)
         case _ =>
-          A.pure(state)
+          A.delay(state)
       }
     }
 
@@ -147,7 +146,11 @@ object IOActorSystem {
                 State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
             }
         } else {
-          State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+
+          for {
+            _ <- state.context.log.error(error.getLocalizedMessage, error)
+            next <- State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+          } yield next
         }
       }
     }
@@ -181,7 +184,7 @@ object IOActorSystem {
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
-          case Command.IsAllowed(onBuild, onError) =>
+          case Command.IsAllowed(onBuild, _) =>
             onBuild >>= (c => reduce(c))
           case OnMessage(message) =>
             onMessage(message, this, behavior)
@@ -285,7 +288,6 @@ object IOActorSystem {
         extends State[F, T] {
 
       def setup(): F[State[F, T]] = {
-
         if (children.isEmpty) {
           notifyShutdownDone.as(this.withBehavior(Behavior.Stop()))
         } else {
@@ -299,16 +301,13 @@ object IOActorSystem {
           case Command.IsAllowed(_, onError) =>
             onError.complete(new Exception(s"Actor ${context.path} already stopped")).as(this)
           case ChildDown(name) =>
-            val next: State[F, T] = this.modify(_.children).using(_ - name)
-            val lastTask: F[State[F, T]] = if (next.children.isEmpty) {
-              notifyShutdownDone.as(next)
+            val nextChildren: Map[String, Link[F]] = children - name
+            if (nextChildren.isEmpty) {
+              notifyShutdownDone.as(this.modify(_.children).setTo(nextChildren))
             } else {
-              next.pure[F]
+              A.pure(this.modify(_.children).setTo(nextChildren))
             }
-
-            lastTask
           case other =>
-            println(other)
             A.pure(this)
         }
       }
@@ -376,43 +375,28 @@ object IOActorSystem {
   final case class Actor[F[_], T](
       name: String,
       parentPath: Seq[String],
-      queue: Queue[F, Command[F, T]]
+      channel: Channel[F, Command[F, T]]
   )(implicit A: Async[F])
       extends ActorRef[F, T] {
     self =>
     private lazy val _path = s"${parentPath.mkString("/")}/$name"
 
-    private def checkState(cmd: Command[F, T]): F[Unit] = {
-      for {
-        onBuild <- Deferred[F, Unit]
-        onError <- Deferred[F, Throwable]
-        _ <- queue.offer(
-          Command.IsAllowed(
-            onBuild.complete(()).as(cmd),
-            onError
-          )
-        )
-        _ <- A.race(onError.get, onBuild.get).flatMap {
-          case Left(value) => A.raiseError[Unit](value)
-          case _           => A.unit
-        }
-      } yield ()
-
-    }
-
     private def push(cmd: Command[F, T]): F[Unit] = {
-      queue.offer(cmd)
+      channel.send(cmd).flatMap {
+        case Left(_) => A.raiseError[Unit](new Exception(s"Actor $path already stopped"))
+        case _       => A.unit
+      }
     }
 
     def stopChild(name: String): F[Unit] = {
-      checkState(Command.StopChild(name))
+      push(Command.StopChild(name))
     }
 
     def signal(signal: Signal): F[Unit] = {
-      checkState(Command.OnSignal(signal))
+      push(Command.OnSignal(signal))
     }
 
-    def stop(): F[Unit] = checkState(Command.Stop())
+    def stop(): F[Unit] = push(Command.Stop())
 
     def spawn[A](name: String, b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = {
       Async[F].async { resolve =>
@@ -473,12 +457,12 @@ object IOActorSystem {
     }
 
     override def send(msg: T): F[Unit] = {
-      checkState(msg)
+      push(msg)
     }
 
   }
 
-  object Actor {
+  private object Actor {
 
     def apply[F[_], T](
         name: String,
@@ -488,26 +472,26 @@ object IOActorSystem {
     )(implicit A: Async[F]): F[(Actor[F, T], Context[F, T])] = {
 
       for {
-        queue <- Queue.bounded[F, Command[F, T]](10)
-        shutdownSignal <- SignallingRef[F].of(false)
-        actor = Actor[F, T](name, parentPath, queue)
+
+        channel <- Channel.synchronous[F, Command[F, T]]
+        actor = Actor[F, T](name, parentPath, channel)
         logLib <- Slf4jLogger.fromName[F](actor.path)
         log = IOLogger.build(logLib)
         context = IOContext[F, T](actor, log)
         _ <- log.info(s"Creating actor ${actor.path}")
         initState <- State
           .Init[F, T](
-            behavior,
-            context,
-            /*shutdownSignal.set(true) >>*/ context.log.info(s"Actor ${context.path} is down") >> notifyShutdown,
-            Map.empty,
-            defaultHandler
+            behavior = behavior,
+            context = context,
+            notifyShutdownDone = channel.close.void,
+            children = Map.empty,
+            signalHandler = defaultHandler
           )
           .setup()
-        _ <- Stream
-          .fromQueueUnterminated(queue, 1)
+
+        _ <- channel.stream
           .evalScan[F, State[F, T]](initState)(_ reduce _)
-          //  .interruptWhen(shutdownSignal)
+          .onFinalize(context.log.info(s"Actor ${context.path} is down 2") >> notifyShutdown)
           .compile
           .drain
           .start
