@@ -1,5 +1,7 @@
 package xplat.core.api
 
+import cats.effect.Resource
+
 import scala.concurrent.duration.FiniteDuration
 
 trait ActorSystem[F[_]] {
@@ -9,5 +11,5 @@ trait ActorSystem[F[_]] {
 }
 
 object ActorSystem {
-  def apply[F[_]](implicit as: F[ActorSystem[F]]): as.type = as
+  def apply[F[_]](implicit as: ActorSystemBuilder[F]): Resource[F, ActorSystem[F]] = as.build()
 }
