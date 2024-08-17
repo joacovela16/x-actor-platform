@@ -316,7 +316,7 @@ object IOActorSystem {
             } else {
               A.pure(this.modify(_.children).setTo(nextChildren))
             }
-          case other =>
+          case _ =>
             A.pure(this)
         }
       }
