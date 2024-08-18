@@ -316,6 +316,8 @@ object IOActorSystem {
             } else {
               A.pure(this.modify(_.children).setTo(nextChildren))
             }
+          case AddChild(_, _, onError) =>
+            onError.complete(new Exception(s"Actor is down")).as(this)
           case _ =>
             A.pure(this)
         }

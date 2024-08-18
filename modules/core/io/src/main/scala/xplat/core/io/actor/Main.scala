@@ -2,10 +2,13 @@ package xplat.core.io.actor
 
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
-import xplat.core.api.{ActorSystem, Signal}
+import xplat.core.api.{ActorRef, ActorSystem, Signal}
 import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
 
 object Main extends IOApp {
+
+  final case class Ping()
+  final case class Pong[F[_]](respondTo: ActorRef[F, String])
 
   def run(args: List[String]): IO[ExitCode] = {
 
@@ -31,6 +34,20 @@ object Main extends IOApp {
           }
         }
         _ <- (1 until 3).toList.map(x => ref ! x).sequence_
+      } yield ExitCode.Success
+    }
+
+    ActorSystem[IO].use { as =>
+      for {
+        ping <- as.spawn[Pong[IO]]("ping") { b =>
+          b.message { pong =>
+            pong.respondTo ! "pepe"
+          }
+        }
+        r1 <- ping.ask[String](ref => Pong(ref))
+        r2 <- ping.ask[String](ref => Pong(ref))
+        _ = println(r1)
+        _ = println(r2)
       } yield ExitCode.Success
     }
   }
