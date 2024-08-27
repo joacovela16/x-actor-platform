@@ -1,4 +1,4 @@
-import Dependencies._
+
 
 ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / version := "0.1.0-SNAPSHOT"
@@ -18,11 +18,25 @@ val commonsSettings = Seq(
   )
 )
 
+lazy val exprLibCore = (project in file("./modules/library/expr/core"))
+  .settings(
+    name := "expr-lib-core"
+  )
+
+lazy val sqlLibCore = (project in file("./modules/library/expr/sql"))
+  .aggregate(exprLibCore)
+  .dependsOn(exprLibCore)
+  .settings(
+    name := "sql-lib-core",
+    commonsSettings
+  )
+
 lazy val coreAPI = (project in file("./modules/api/core"))
   .settings(
     name := "core-api",
     commonsSettings
   )
+
 //lazy val macros  = (project in file("./modules/api/macros"))
 //  .settings(
 //  )
@@ -40,14 +54,14 @@ lazy val ioActor = (project in file("./modules/core/io"))
   .settings(
     name := "io-actor",
     commonsSettings,
-    libraryDependencies++=Seq(
+    libraryDependencies ++= Seq(
       Dependencies.Compile.catsFS2
     )
   )
 
 lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
-  .aggregate(coreAPI, corePersistence)
-  .dependsOn(coreAPI, corePersistence)
+  .aggregate(coreAPI, corePersistence, sqlLibCore)
+  .dependsOn(coreAPI, corePersistence, sqlLibCore)
   .settings(
     name := "xplat-sqlite-persistence",
     libraryDependencies ++= Seq(

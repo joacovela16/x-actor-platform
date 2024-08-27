@@ -392,11 +392,12 @@ object Main {
   }
 
   val x = Person.select
-    .filter(x => x.name === "pepe")
-    .filter(x => x.name === Person.select.filter(x => x.age === 3).map(_.city).toExpr)
+//    .filter(x => x.name === "pepe")
+    //.filter(x => x.name === Person.select.filter(x => x.age === 3).map(_.city).toExpr)
     //   .map(x => x.age)
-//    .map(x => (x.name, x.age))
-    .join(Person) { (p, c) => p.name === c.city }
+    .map(x => (x.name, x))
+    .map(x => x._2)
+//    .join(Person) { (p, c) => p.name === c.city }
   //    .flatMap(_ => Person.select)
 //    .map(x => x._2)
 
@@ -415,7 +416,7 @@ object Main {
     )
    */
 
-  pprint.pprintln(y.query.ast)
+  pprint.pprintln(x.query.ast)
   /*.join(City) { (p, c) => p.name === c.name }
     .map(_._1)
     .map(x => x.name)
