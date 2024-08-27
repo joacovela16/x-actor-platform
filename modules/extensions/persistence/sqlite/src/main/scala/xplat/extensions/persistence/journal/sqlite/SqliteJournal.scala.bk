@@ -1,0 +1,92 @@
+package xplat.extensions.persistence.journal.sqlite
+
+import cats.Monad
+import scalasql.Table
+import scalasql.core.{Config, DbClient}
+import xplat.core.persistence.api.Journal
+import xplat.core.persistence.api.journal.{JournalEvent, JournalSnapshot}
+import scalasql._
+import scalasql.SqliteDialect._
+import scalasql.query.InsertColumns
+import xplat.extensions.persistence.journal.sqlite.SqliteJournal.{JournalEventSource, JournalSnapshotSource}
+
+final case class SqliteJournal[F[_]]()(implicit A: Monad[F]) extends Journal[F] {
+
+  private val dbClient = new DbClient.Connection(
+    java.sql.DriverManager
+      .getConnection("jdbc:h2:mem:testdb" + scala.util.Random.nextInt(), "sa", ""),
+    new Config {
+      override def nameMapper(v: String): String = v.toLowerCase()
+    }
+  )
+
+  private val db = dbClient.getAutoCommitClientConnection
+
+  private val DEFAULT_OFFSET: Long = 0L
+
+  override def create(shard: Journal.Shard): F[Unit] = A.pure {
+    val query: InsertColumns[JournalSnapshotSource, JournalSnapshotSource[Sc]] = JournalSnapshotSource.insert.columns(
+      _.id := shard.id,
+      _.shard := shard.name,
+      _.offset := DEFAULT_OFFSET,
+      _.snapshotOffset := -1L
+    )
+    db.run(query)
+  }
+
+  override def getEvents(shard: Journal.Shard): F[LazyList[JournalEvent]] = A.pure {
+    db.stream(
+      JournalSnapshotSource.select
+        .filter(x => x.id === shard.id && x.shard === shard.name)
+        .join(JournalEventSource)((state, event) => state.id === event.id && event.offset > state.snapshotOffset)
+        .map(_._2)
+    ).toList
+      .to(LazyList)
+      .map(x =>
+        JournalEvent(
+          shard = x.shard,
+          id = x.id,
+          offset = x.offset,
+          timestamp = x.timestamp,
+          data = x.data
+        )
+      )
+  }
+
+  override def getSnapshot(shard: Journal.Shard): F[Option[JournalSnapshot]] = ???
+
+  override def writeSnapshot(shard: Journal.Shard, data: Array[Byte]): F[Unit] = ???
+
+  override def getEventsByRange(shard: Journal.Shard, from: Long, to: Long): F[LazyList[JournalEvent]] = ???
+
+  override def deleteEventsByRange(shard: Journal.Shard, from: Long, to: Long): F[Unit] = ???
+
+  override def getOffset(shard: Journal.Shard): F[Long] = ???
+
+  override def writeEvents(shard: Journal.Shard, entries: Seq[Array[Byte]]): F[Unit] = ???
+
+  override def close(): F[Unit] = ???
+}
+
+object SqliteJournal {
+
+  final case class JournalSnapshotSource[G[_]](
+      shard: G[String],
+      id: G[String],
+      offset: G[Long],
+      snapshotOffset: G[Long],
+      data: G[Option[Array[Byte]]]
+  )
+
+  object JournalSnapshotSource extends Table[JournalSnapshotSource]()
+
+  final case class JournalEventSource[G[_]](
+      shard: G[String],
+      id: G[String],
+      offset: G[Long],
+      timestamp: G[Long],
+      data: G[Array[Byte]]
+  )
+
+  object JournalEventSource extends Table[JournalEventSource]()
+}

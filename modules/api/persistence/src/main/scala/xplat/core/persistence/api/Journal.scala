@@ -20,8 +20,6 @@ trait Journal[F[_]] {
 
   def writeEvents(shard: Journal.Shard, entries: Seq[Array[Byte]]): F[Unit]
 
-  def writeSnapshot(shard: Journal.Shard, data: Array[Byte], entries: Seq[Array[Byte]]): F[Unit]
-
   def close(): F[Unit]
 }
 

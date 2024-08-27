@@ -7,14 +7,11 @@ ThisBuild / organizationName := "x-actor-platform"
 
 val commonsSettings = Seq(
   libraryDependencies ++= Seq(
-    // https://mvnrepository.com/artifact/com.lihaoyi/scalasql
-    "com.lihaoyi" %% "scalasql" % "0.1.5",
     Dependencies.Compile.pprint,
     Dependencies.Compile.quicklens,
     Dependencies.Compile.catsSelfLogger,
-//    Dependencies.Compile.slf4j,
     Dependencies.Compile.logbackClassic,
-//    Dependencies.Compile.logbackCore,
+    Dependencies.Compile.cats,
     Dependencies.Compile.catsMtl,
     Dependencies.Test.scalaTest,
     Dependencies.Test.catTest
@@ -26,7 +23,9 @@ lazy val coreAPI = (project in file("./modules/api/core"))
     name := "core-api",
     commonsSettings
   )
-
+//lazy val macros  = (project in file("./modules/api/macros"))
+//  .settings(
+//  )
 lazy val corePersistence = (project in file("./modules/api/persistence"))
   .aggregate(coreAPI)
   .dependsOn(coreAPI)
@@ -41,13 +40,24 @@ lazy val ioActor = (project in file("./modules/core/io"))
   .settings(
     name := "io-actor",
     commonsSettings,
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.cats,
-      Dependencies.Compile.catsFS2,
-      Dependencies.Compile.catsEffects,
-      Dependencies.Compile.catsMtl,
-      Dependencies.Compile.catsLogger
+    libraryDependencies++=Seq(
+      Dependencies.Compile.catsFS2
     )
+  )
+
+lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
+  .aggregate(coreAPI, corePersistence)
+  .dependsOn(coreAPI, corePersistence)
+  .settings(
+    name := "xplat-sqlite-persistence",
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.sqliteDriver,
+      Dependencies.Compile.scalasql,
+      Dependencies.Compile.sourceCode,
+      "com.softwaremill.magnolia1_2" % "magnolia_2.12" % "1.1.10",
+      "com.chuusai" %% "shapeless" % "2.3.12"
+    ),
+    commonsSettings
   )
 
 lazy val root = (project in file("."))

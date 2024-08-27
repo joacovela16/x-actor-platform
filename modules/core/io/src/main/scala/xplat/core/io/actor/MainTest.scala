@@ -1,6 +1,6 @@
 package xplat.core.io.actor
-import scalasql._
-import scalasql. SqliteDialect._
+//import scalasql._
+//import scalasql. SqliteDialect._
 
 object MainTest {
   // Define your table model classes
@@ -11,7 +11,7 @@ object MainTest {
                          district: T[String],
                          population: T[Long]
                        )
-  object City extends Table[City]
+//  object City extends Table[City]
 
-  City.select.map(x=> x.id === 3 && x.name === "")
+//  City.select.map(x=> x.id === 3 && x.name === "")
 }

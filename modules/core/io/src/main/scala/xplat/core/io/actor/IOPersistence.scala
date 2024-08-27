@@ -2,8 +2,8 @@ package xplat.core.io.actor
 
 import cats.effect.Async
 import cats.implicits._
-import xplat.core.api.error.{CodecError, XError}
 import xplat.core.api._
+import xplat.core.api.error.{CodecError, XError}
 import xplat.core.persistence.Persistence
 import xplat.core.persistence.api.journal.JournalEvent
 import xplat.core.persistence.api.{Effect, Effects, Journal, JournalBuilder}
