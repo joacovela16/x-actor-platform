@@ -1,6 +1,6 @@
+Global / onChangedBuildSource := ReloadOnSourceChanges
 
-
-ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "x-actor-platform"
@@ -20,7 +20,10 @@ val commonsSettings = Seq(
 
 lazy val exprLibCore = (project in file("./modules/library/expr/core"))
   .settings(
-    name := "expr-lib-core"
+    name := "expr-lib-core",
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.scalaReflect
+    )
   )
 
 lazy val sqlLibCore = (project in file("./modules/library/expr/sql"))
@@ -60,21 +63,19 @@ lazy val ioActor = (project in file("./modules/core/io"))
   )
 
 lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
-  .aggregate(coreAPI, corePersistence, sqlLibCore)
-  .dependsOn(coreAPI, corePersistence, sqlLibCore)
+  .aggregate(coreAPI, corePersistence, sqlLibCore, ioActor)
+  .dependsOn(coreAPI, corePersistence, sqlLibCore, ioActor)
   .settings(
     name := "xplat-sqlite-persistence",
     libraryDependencies ++= Seq(
-      Dependencies.Compile.sqliteDriver,
-      Dependencies.Compile.scalasql,
-      Dependencies.Compile.sourceCode,
-      "com.softwaremill.magnolia1_2" % "magnolia_2.12" % "1.1.10",
-      "com.chuusai" %% "shapeless" % "2.3.12"
+      Dependencies.Compile.sqliteDriver
     ),
     commonsSettings
   )
 
 lazy val root = (project in file("."))
+  .aggregate(sqlitePersistence)
+  .dependsOn(sqlitePersistence)
   .settings(
     name := "x-actor-alive",
     commonsSettings

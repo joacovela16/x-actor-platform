@@ -3,12 +3,12 @@ import sbt.*
 object Dependencies {
 
   object Versions {
+    val scalaVersion = "2.13.14"
 
     val quicklens: String = "1.9.7"
     val chill: String = "0.10.0"
 
     val circe: String = "0.14.9"
-    val sourceCode: String = "0.4.2"
     val config: String = "1.4.2"
     val ficusversion: String = "1.5.2"
 
@@ -17,7 +17,7 @@ object Dependencies {
 
     val catsEffects: String = "3.5.4"
     val cats: String = "2.12.0"
-    val catsFS2: String = "3.10.2"
+    val catsFS2: String = "3.11.0"
     val catsLogger: String = "2.7.0"
     val catsMtl: String = "1.4.0"
 
@@ -33,14 +33,12 @@ object Dependencies {
     val catTest: String = "1.5.0"
     val pprint: String = "0.9.0"
 
-    val scalasql: String = "0.1.5"
   }
 
   object Compile {
 
-    val scalasql = "com.lihaoyi" %% "scalasql" % Versions.scalasql
-
     val pprint = "com.lihaoyi" %% "pprint" % Versions.pprint
+    val scalaReflect = "org.scala-lang" % "scala-reflect" % Versions.scalaVersion
 
     val cats = "org.typelevel" %% "cats-core" % Versions.cats
     val catsEffects = "org.typelevel" %% "cats-effect" % Versions.catsEffects
@@ -65,8 +63,6 @@ object Dependencies {
     val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % Versions.scalaLogging
     val logbackClassic = "ch.qos.logback" % "logback-classic" % Versions.logbackClassic
     val logbackCore = "ch.qos.logback" % "logback-core" % Versions.logbackClassic
-
-    val sourceCode = "com.lihaoyi" %% "sourcecode" % Versions.sourceCode
   }
 
   object Test {
