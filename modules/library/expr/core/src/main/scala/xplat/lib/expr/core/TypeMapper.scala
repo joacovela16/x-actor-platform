@@ -7,7 +7,7 @@ trait TypeMapper[T] {
 }
 
 object TypeMapper {
-  def apply[T](implicit typeMapper: TypeMapper[T]): typeMapper.type = typeMapper
+  def apply[T](implicit typeMapper: TypeMapper[T]): TypeMapper[T] = typeMapper
 
   implicit val string: TypeMapper[String] = new TypeMapper[String] {
     override def tpe: Type = Type.String

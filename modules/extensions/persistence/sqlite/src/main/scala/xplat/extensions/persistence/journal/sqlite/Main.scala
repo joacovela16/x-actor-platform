@@ -137,7 +137,7 @@ object Main {
 
   final case class Person[F[_]](name: F[String], age: F[Int], city: F[String])
 
-  object Person extends Table[Person] {
+  object Person extends Table[Person]() {
 /*
 
     override def select: Select[Person[TypedAst], Person[Id]] = {
