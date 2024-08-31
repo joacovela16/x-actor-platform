@@ -3,7 +3,7 @@ package xplat.extensions.persistence.journal.sqlite
 import xplat.lib.expr.core.Ast.Entity
 import xplat.lib.expr.core.EType.Clazz
 import xplat.lib.expr.core.TAst.Access
-import xplat.lib.expr.core.{Ast, AsExpr, DataExtractor, Field, Metadata, Query, Table, EType, TypeMapper, TAst}
+import xplat.lib.expr.core.{Ast, QueryProvider, DataExtractor, Field, Metadata, Query, Table, EType, TypeMapper, TAst}
 
 import scala.language.implicitConversions
 
@@ -17,7 +17,6 @@ object Main {
   //    implicit def fromString(value: String): Entity = Entity(value)
   //  }
 
-  type Id[T] = T
 
 
   //  final case class Query[Q, R](construct: (Q, DataExtractor) => R, adt: ADT) {
@@ -29,7 +28,7 @@ object Main {
   //  Query[(TAst[String], TAst[Boolean], TAst[Int]), (String, Boolean, Int)]
 
 
-  final case class Select[Q, R0](query: Query.Aux[Q, R0]) extends AsExpr[Q] {
+  final case class Select[Q, R0](query: Query.Aux[Q, R0]) extends QueryProvider[Q] {
     override def toExpr: Q = query.constructFromAST(query.ast)
 
     def filter(f: Q => TAst[Boolean]): Select[Q, R0] = {

@@ -1,7 +1,6 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
-//ThisBuild / scalacOptions += "-Ymacro-debug-verbose"
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "x-actor-platform"
@@ -23,8 +22,11 @@ lazy val exprLibCore = (project in file("./modules/library/expr/core"))
   .settings(
     name := "expr-lib-core",
     libraryDependencies ++= Seq(
-      Dependencies.Compile.scalaReflect
-    )
+      Dependencies.Compile.scalaReflect,
+      Dependencies.Compile.catsFS2,
+      Dependencies.Compile.catsEffects,
+    ),
+    commonsSettings
   )
 
 lazy val sqlLibCore = (project in file("./modules/library/expr/sql"))
