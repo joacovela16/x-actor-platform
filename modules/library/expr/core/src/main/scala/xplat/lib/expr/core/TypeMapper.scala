@@ -1,7 +1,7 @@
 package xplat.lib.expr.core
 
 trait TypeMapper[T] {
-  def tpe: Type
+  def tpe: EType
   def get(dataExtractor: DataExtractor, index: Int): Either[String, T]
   def set(dataStore: DataStore, index: Int): Either[String, DataStore]
 }
@@ -10,7 +10,7 @@ object TypeMapper {
   def apply[T](implicit typeMapper: TypeMapper[T]): TypeMapper[T] = typeMapper
 
   implicit val string: TypeMapper[String] = new TypeMapper[String] {
-    override def tpe: Type = Type.String
+    override def tpe: EType = EType.String
 
     override def get(dataExtractor: DataExtractor, index: Int): Either[String, String] = ???
 
@@ -18,14 +18,14 @@ object TypeMapper {
   }
 
   implicit val int: TypeMapper[Int] = new TypeMapper[Int] {
-    override def tpe: Type = Type.Int
+    override def tpe: EType = EType.Int
     override def get(dataExtractor: DataExtractor, index: Int): Either[String, Int] = ???
 
     override def set(dataStore: DataStore, index: Int): Either[String, DataStore] = ???
   }
 
   implicit val boolean: TypeMapper[Boolean] = new TypeMapper[Boolean] {
-    override def tpe: Type = Type.Boolean
+    override def tpe: EType = EType.Boolean
     override def get(dataExtractor: DataExtractor, index: Int): Either[String, Boolean] = ???
 
     override def set(dataStore: DataStore, index: Int): Either[String, DataStore] = ???

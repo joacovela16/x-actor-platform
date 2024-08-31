@@ -1,3 +1,3 @@
 package xplat.lib.expr.core
 
-final case class Field(name: String, tpe: Type)
+final case class Field(name: String, tpe: EType)

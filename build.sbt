@@ -1,6 +1,7 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
+//ThisBuild / scalacOptions += "-Ymacro-debug-verbose"
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "x-actor-platform"
