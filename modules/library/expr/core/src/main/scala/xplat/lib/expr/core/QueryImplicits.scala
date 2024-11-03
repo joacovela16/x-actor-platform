@@ -2,12 +2,12 @@ package xplat.lib.expr.core
 
 trait QueryImplicits {
 
-  implicit def fromExpr[R0](implicit tm: TypeMapper[R0]): Query.Aux[TAst[R0], R0] = new Query[TAst[R0]] {
+  implicit def fromExpr[R0](implicit tm: TypeMapper[R0]): Query.Aux[Expr[R0], R0] = new Query[Expr[R0]] {
     override type R = R0
-    override def value: TAst[R] = TAst.Wrapper(Ast.Empty)
+    override def value: Expr[R] = Expr.Wrapper(Ast.Empty)
     override def ast: Ast = Ast.Empty
-    override def constructFromAST(ast: Ast): TAst[R] = TAst.Wrapper(ast)
-    override def getAST(q: TAst[R]): Ast = q.ast
+    override def constructFromAST(ast: Ast): Expr[R] = Expr.Wrapper(ast)
+    override def getAST(q: Expr[R]): Ast = q.ast
   }
 
   implicit def qt2[Q1, Q2](implicit q1: Query[Q1], q2: Query[Q2]): Query.Aux[(Q1, Q2), (q1.R, q2.R)] = {

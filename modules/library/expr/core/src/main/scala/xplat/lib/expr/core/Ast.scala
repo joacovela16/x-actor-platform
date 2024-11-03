@@ -4,12 +4,20 @@ sealed trait Ast {}
 
 object Ast {
   case object Empty extends Ast
-  final case class Entity(tpe: EType.Clazz) extends Ast
+  final case class Entity(tpe: Type.Clazz) extends Ast
   final case class FieldAccess(entity: String, field: String, index: Int) extends Ast
   final case class BinaryOperation(left: Ast, operation: Operation, right: Ast) extends Ast
-  final case class UnaryOperation(adt: Ast, operation: Operation) extends Ast
+  final case class UnaryOperation(operation: Operation, ast: Ast) extends Ast
   final case class Apply(name: String, over: Ast, body: Ast = Ast.Empty) extends Ast
-  final case class Tuple(items: Ast*) extends Ast
+  final case class Tuple(items: List[Ast]) extends Ast
+
+  object Tuple {
+
+    def apply(items: Ast*): Ast.Tuple = {
+      Ast.Tuple(items.toList)
+    }
+
+  }
 
   object Apply {
     //      def empty(name: String): Function = Function.apply(name, Nil, Map.empty, ADT.Empty)
@@ -18,15 +26,15 @@ object Ast {
   }
 
   sealed trait Literal extends Ast {
-    def tpe: EType
+    def tpe: Type
   }
 
   object Literal {
-    final case class LInt(data: Int, tpe: EType = EType.Int) extends Literal
-    final case class LFloat(data: Float, tpe: EType = EType.Int) extends Literal
-    final case class LBoolean(data: Boolean, tpe: EType = EType.Int) extends Literal
-    final case class LString(data: String, tpe: EType = EType.Int) extends Literal
-    final case class LByteArray(data: Array[Byte], tpe: EType = EType.Int) extends Literal
+    final case class LInt(data: Int, tpe: Type = Type.Int) extends Literal
+    final case class LFloat(data: Float, tpe: Type = Type.Int) extends Literal
+    final case class LBoolean(data: Boolean, tpe: Type = Type.Int) extends Literal
+    final case class LString(data: String, tpe: Type = Type.Int) extends Literal
+    final case class LByteArray(data: Array[Byte], tpe: Type = Type.Int) extends Literal
   }
 
 }

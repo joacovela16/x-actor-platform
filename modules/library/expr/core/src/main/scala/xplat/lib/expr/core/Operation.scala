@@ -11,4 +11,5 @@ object Operation {
     val EQUALS: Operation = Operation("equals", "=")
   }
 
+  implicit def fromString(value:String):Operation = Operation(value, value)
 }

@@ -9,7 +9,7 @@ object Select {
   trait Operations {
 
     implicit class TablePredef[M[_[_]]](table: Table[M]) {
-      def select: Select[M[TAst], M[Commons.Id]] = Select(table.query)
+      def select: Select[M[Expr], M[Commons.Id]] = Select(table.query)
     }
 
   }
@@ -19,10 +19,10 @@ object Select {
     implicit class FilterOps[Q, R](s: Select[Q, R]) {
       private val query = s.query
 
-      def withFilter(f: Q => TAst[Boolean]): Select[Q, R] = filter(f)
+      def withFilter(f: Q => Expr[Boolean]): Select[Q, R] = filter(f)
 
-      def filter(f: Q => TAst[Boolean]): Select[Q, R] = {
-        val localExpr: TAst[Boolean] = f(query.value)
+      def filter(f: Q => Expr[Boolean]): Select[Q, R] = {
+        val localExpr: Expr[Boolean] = f(query.value)
 
         Select[Q, R](
           query = new Query.MatQuery[Q, R] {
@@ -93,7 +93,7 @@ object Select {
     implicit class TableJoinPredef[Q, R0](select: Select[Q, R0]) {
       private val query = select.query
 
-      def join(f: Q => TAst[Boolean]): Select[Q, R0] = {
+      def join(f: Q => Expr[Boolean]): Select[Q, R0] = {
         val localExpr = f(query.value)
 
         Select[Q, query.R](
@@ -106,15 +106,15 @@ object Select {
         )
       }
 
-      def join[G[_[_]]](other: Table[G])(f: (Q, G[TAst]) => TAst[Boolean]): Select[(Q, G[TAst]), (R0, G[Commons.Id])] = {
+      def join[G[_[_]]](other: Table[G])(f: (Q, G[Expr]) => Expr[Boolean]): Select[(Q, G[Expr]), (R0, G[Commons.Id])] = {
 
         val g = other.selfContainer.value
         val expr = f(query.value, g)
 
-        Select[(Q, G[TAst]), (R0, G[Commons.Id])](
-          query = new Query.MatQuery[(Q, G[TAst]), (R0, G[Commons.Id])] {
+        Select[(Q, G[Expr]), (R0, G[Commons.Id])](
+          query = new Query.MatQuery[(Q, G[Expr]), (R0, G[Commons.Id])] {
             self =>
-            override def value: (Q, G[TAst]) = (query.value, g)
+            override def value: (Q, G[Expr]) = (query.value, g)
 
             override def ast: Ast = Ast.Apply(
               name = "join",
@@ -122,9 +122,9 @@ object Select {
               body = expr.ast
             )
 
-            override def constructFromAST(ast: Ast): (Q, G[TAst]) = (query.constructFromAST(ast), other.selfContainer.constructFromAST(ast))
+            override def constructFromAST(ast: Ast): (Q, G[Expr]) = (query.constructFromAST(ast), other.selfContainer.constructFromAST(ast))
 
-            override def getAST(q: (Q, G[TAst])): Ast = self.ast
+            override def getAST(q: (Q, G[Expr])): Ast = self.ast
           }
         )
       }

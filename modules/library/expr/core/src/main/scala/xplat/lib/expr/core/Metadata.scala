@@ -2,8 +2,9 @@ package xplat.lib.expr.core
 
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
+import xplat.lib.expr.core.{Expr => JExpr, Type => JType}
 
-final case class Metadata[M[_[_]]](tpe: EType.Clazz, query: Query.Aux[M[TAst], M[Commons.Id]])
+final case class Metadata[M[_[_]]](tpe: Type.Clazz, query: Query.Aux[M[JExpr], M[Commons.Id]])
 
 object Metadata {
   implicit def mk[M[_[_]]]: Metadata[M] = macro genMetadataImpl[M]
@@ -12,13 +13,13 @@ object Metadata {
   def genMetadataImpl[M[_[_]]](c: blackbox.Context)(implicit tw: c.WeakTypeTag[M[Any]]): c.Expr[Metadata[M]] = {
     import c.universe._
 
-    val TypedAstType = typeOf[TAst[_]]
-    val ExprAccessType = typeOf[TAst.Access[_]]
+    val TypedAstType = typeOf[JExpr[_]]
+    val ExprAccessType = typeOf[JExpr.Access[_]]
     val IdType = symbolOf[Commons.Id[_]]
     val QueryType = typeOf[Query[_]]
-    val TypeType = typeOf[EType]
+    val TypeType = typeOf[JType]
     val FieldSymbol = typeOf[Field]
-    val TypeClazzSymbol = typeOf[EType.Clazz]
+    val TypeClazzSymbol = typeOf[JType.Clazz]
     val TypeMapperType = typeOf[TypeMapper[_]]
     val MetadataType = typeOf[Metadata[Any]]
     val AstEntityType = typeOf[Ast.Entity]

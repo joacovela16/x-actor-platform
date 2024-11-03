@@ -19,15 +19,21 @@ object Main extends SQLiteDialect {
     val q2 = for {
       s1 <- Person.select
       s2 <- Person.select.map(x => x.age) if s1.age === s2
-      s3 <- City.select.join(x=>s2 === x.amount)
+      s3 <- City.select.join(x => s2 === x.amount)
     } yield s3
 
-//    pprint.pprintln(
-//      Person.select.join(City)((a, b) => a.city === b.name).ast
-//    )
+    pprint.pprintln(
+      Person.select.join(City)((a, b) => a.city === b.name).ast
+    )
 
 //    pprint.pprintln(q1.ast)
-    pprint.pprintln(q2.ast)
+
+//    pprint.pprintln(q2.ast)
+
+    val i1 = Person.insert.create(_.age := 23, _.name := "Joaquin")
+    val i2 = Person.insert.batch(_(_.age := 23, _.name := "Joaquin"), _(_.age := 23, _.name := "Joaquin"))
+
+//    pprint.pprintln(i2.ast)
 
   }
 
