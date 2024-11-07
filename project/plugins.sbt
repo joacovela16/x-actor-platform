@@ -1,0 +1,1 @@
+addSbtPlugin("com.github.sbt" % "sbt-boilerplate" % "0.7.0")

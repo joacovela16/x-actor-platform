@@ -1,0 +1,12 @@
+package xplat.lib.optimizer
+
+trait ParamGetImpl extends ParamGetImplLP{
+[2..#implicit def a1[[#A1#, ], Out]: ParamGet.Aux[([#A1#, ]), Out, ([#Expr[A1]#, ])] = ???
+
+#
+]
+}
+
+trait ParamGetImplLP{
+    implicit def a1[A1, Out]: ParamGet.Aux[A1, Out, Expr[A1]] = ???
+}

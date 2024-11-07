@@ -32,6 +32,7 @@ object Dependencies {
     val scalaTest: String = "3.2.19"
     val catTest: String = "1.5.0"
     val pprint: String = "0.9.0"
+    val sourcecode = "0.4.2"
 
   }
 
@@ -49,6 +50,7 @@ object Dependencies {
     val catsSelfLogger = "org.typelevel" %% "log4cats-slf4j" % Versions.catsSelfLogger
 
     val quicklens = "com.softwaremill.quicklens" %% "quicklens" % Versions.quicklens
+    val sourcecode = "com.lihaoyi" %% "sourcecode" % Versions.sourcecode
 
     val sqliteDriver = "org.xerial" % "sqlite-jdbc" % Versions.sqliteDriver
     val mysqlDriver = "mysql" % "mysql-connector-java" % Versions.mysqlDriver

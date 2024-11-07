@@ -1,0 +1,12 @@
+package xplat.lib.optimizer
+
+trait VarGetImpl extends VarGetImplLP{
+[2..#implicit def a1[[#A1#, ], Out]: VariableGet.Aux[([#A1#, ]), Out, ([#Expr[A1]#, ])] = ???
+
+#
+]
+}
+
+trait VarGetImplLP{
+    implicit def a1[A1, Out]: VariableGet.Aux[A1, Out, Expr[A1]] = ???
+}

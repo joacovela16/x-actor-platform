@@ -18,13 +18,27 @@ val commonsSettings = Seq(
   )
 )
 
+lazy val optLibCore = (project in file("./modules/library/optimizer"))
+  .enablePlugins(spray.boilerplate.BoilerplatePlugin)
+  .settings(
+    name := "optimizer",
+    libraryDependencies ++= Seq(
+//      Dependencies.Compile.scalaReflect,
+//      Dependencies.Compile.catsFS2,
+//      Dependencies.Compile.catsEffects,
+      Dependencies.Compile.sourcecode,
+      Dependencies.Compile.scalaReflect,
+    ),
+    commonsSettings
+  )
+
 lazy val exprLibCore = (project in file("./modules/library/expr/core"))
   .settings(
     name := "expr-lib-core",
     libraryDependencies ++= Seq(
       Dependencies.Compile.scalaReflect,
       Dependencies.Compile.catsFS2,
-      Dependencies.Compile.catsEffects,
+      Dependencies.Compile.catsEffects
     ),
     commonsSettings
   )
@@ -77,8 +91,8 @@ lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/
   )
 
 lazy val root = (project in file("."))
-  .aggregate(sqlitePersistence)
-  .dependsOn(sqlitePersistence)
+  .aggregate(sqlitePersistence, optLibCore)
+  .dependsOn(sqlitePersistence, optLibCore)
   .settings(
     name := "x-actor-alive",
     commonsSettings
