@@ -171,7 +171,7 @@ object Main {
   minimize(x + y).subjectTo(
     st(x > 8),
     st(y < 20),
-    st(x - y > 10),
+    st(x > 10 + y),
     st(S1, S2)((i, k) => i < k)((i, k) => v1(i, k) < 9)
       describe "pepep"
   )
