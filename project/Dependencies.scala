@@ -46,6 +46,7 @@ object Dependencies {
     val catsFS2 = "co.fs2" %% "fs2-core" % Versions.catsFS2
     val catsMtl = "org.typelevel" %% "cats-mtl" % Versions.catsMtl
     val catsLogger = "org.typelevel" %% "log4cats-core" % Versions.catsLogger
+    val catsFree = "org.typelevel" %% "cats-free" % Versions.cats
 
     val catsSelfLogger = "org.typelevel" %% "log4cats-slf4j" % Versions.catsSelfLogger
 

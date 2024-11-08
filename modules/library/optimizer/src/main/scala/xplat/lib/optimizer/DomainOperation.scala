@@ -1,6 +1,6 @@
 package xplat.lib.optimizer
 
-trait SetContainerOps[Domain, Out] {
+trait DomainOperation[Domain, Out] {
   type Tuple
   type TupleExpr
   type Apply
@@ -9,7 +9,7 @@ trait SetContainerOps[Domain, Out] {
   def conditional(a: Conditional): TupleExpr => Expr[Boolean]
 }
 
-object SetContainerOps extends SetContainerOpsImpl {
+object DomainOperation extends DomainOperationImpl {
   type Aux[
     T,
     Out,
@@ -17,7 +17,7 @@ object SetContainerOps extends SetContainerOpsImpl {
     TupleExpr0,
     Apply0,
     Conditional0,
-  ] = SetContainerOps[T, Out] {
+  ] = DomainOperation[T, Out] {
     type Tuple = Tuple0;
     type Apply = Apply0;
     type TupleExpr = TupleExpr0;

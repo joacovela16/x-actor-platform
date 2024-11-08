@@ -25,9 +25,11 @@ lazy val optLibCore = (project in file("./modules/library/optimizer"))
     libraryDependencies ++= Seq(
 //      Dependencies.Compile.scalaReflect,
 //      Dependencies.Compile.catsFS2,
-//      Dependencies.Compile.catsEffects,
+      Dependencies.Compile.cats,
+      Dependencies.Compile.catsEffects,
       Dependencies.Compile.sourcecode,
-      Dependencies.Compile.scalaReflect,
+      Dependencies.Compile.catsFree,
+      "org.scalanlp" %% "breeze" % "2.1.0",
     ),
     commonsSettings
   )

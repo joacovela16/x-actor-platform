@@ -1,8 +1,6 @@
 package xplat.lib.optimizer
 
-sealed trait SSet[T] {
-  def id:String
-}
+sealed trait SSet[T]
 
 object SSet {
   final case class Open[T](id:String) extends SSet[T]

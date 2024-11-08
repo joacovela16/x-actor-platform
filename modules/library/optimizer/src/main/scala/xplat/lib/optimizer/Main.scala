@@ -1,5 +1,11 @@
 package xplat.lib.optimizer
 
+import cats.effect.IO
+import cats.free.Free
+import cats.~>
+
+import scala.language.implicitConversions
+
 object Main {
 
   /*
@@ -123,57 +129,51 @@ object Main {
   def sum[D](value: D): SumExpr[D] = ???
 
   def minimize[T](expr: Expr[T])(implicit c: IsValidVariable[T]): Model = ???
+  def maximize[T](expr: Expr[T])(implicit c: IsValidVariable[T]): Free[AMPLCommand, Unit] = ???
 
-  def subjectTo(expr: Expr[Boolean]): Constraint = ???
-  def st(expr: Expr[Boolean]): Constraint = subjectTo(expr)
-  def st[D](value: D): SubjectTo[D] = ???
+  def constraint(expr: Expr[Boolean]): Free[AMPLCommand, Unit] = ???
+//  def st(expr: Expr[Boolean]): Constraint = subjectTo(expr)
+  def baseOn[D](value: D): SubjectTo[D] = ???
 
   final case class SubjectTo[D]() {}
 
   object SubjectTo {
 
-    implicit class Predef[D, Tuple, TupleExpr, Apply, Conditional](subjectTo: SubjectTo[D])(implicit ops: SetContainerOps.Aux[D, Boolean, Tuple, TupleExpr, Apply, Conditional]) {
-      def apply(x: Conditional)(expr: Apply): Constraint = ???
+    implicit class Predef[D, Apply, Handler](subjectTo: SubjectTo[D])(implicit ops: ConditionDomain.Aux[D, Expr, Boolean, Apply, Handler]) {
+      def where(x: Handler)(expr: Handler): Expr[Boolean] = ???
     }
 
   }
 
-  val S1 = set[Int]
-  val S2 = set[Boolean]
-  val S3 = set[Int]
-  val p1 = param[Int].domain(S1, S3)
+  implicit def var2free[T, D](variable: Variable[T, D]): Free[AMPLCommand, Variable[T, D]] = ???
+  implicit def par2free[T, D](param: Param[T, D]): Free[AMPLCommand, Param[T, D]] = ???
+  implicit def set2free[T](set: SSet[T]): Free[AMPLCommand, SSet[T]] = ???
 
-  sum(S1)(b => b < 10)(b => b + 3)
+  def solve: Free[AMPLCommand, Unit] = ???
 
-  val p3 = param[Boolean]
-    .domain(S1)
-    .project { i =>
-      If(i === 0) {
-        true
-      } Else {
-        false
-      }
-    }
-
-  val p2 = param[Int].domain(S1, S2).project { (a, b) =>
-    If(p1(1, 2) === a && b) {
-      1
-    } Else {
-      0
-    }
+  val interpreter: AMPLCommand ~> IO = new (AMPLCommand ~> IO) {
+    override def apply[A](fa: AMPLCommand[A]): IO[A] = ???
   }
 
-  val v1 = variable[Int].domain(S1, S2)
-  val v2 = variable[Int].domain(S1).where(x => p3(x))
-  val x = variable[Double]
-  val y = variable[Double]
+  def model(m: Free[AMPLCommand, Unit]) = {
+    m.foldMap(interpreter)
+  }
 
-  minimize(x + y).subjectTo(
-    st(x > 8),
-    st(y < 20),
-    st(x > 10 + y),
-    st(S1, S2)((i, k) => i < k)((i, k) => v1(i, k) < 9)
-      describe "pepep"
-  )
+  model {
+    for {
+      s1 <- set[Int]
+      p1 <- param[Int].domain(s1).project(x => x * 2)
+
+      x <- variable[Double]
+      y <- variable[Double]
+
+      _ <- maximize(x * 3 + y * 4)
+
+      _ <- constraint(x + y * 2 <= 14)
+      _ <- constraint(x - y <= 10)
+
+      _ <- solve
+    } yield ()
+  }
 
 }

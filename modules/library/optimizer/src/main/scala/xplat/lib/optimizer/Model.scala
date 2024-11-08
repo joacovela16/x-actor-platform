@@ -7,7 +7,7 @@ final case class Model(
 ) {
   def apply(values: Constraint*): Model = ???
 
-  def subjectTo(values: Constraint*): Model = {
+  def subjectTo(values: Expr[Boolean]*): Model = {
     ???
   }
 
