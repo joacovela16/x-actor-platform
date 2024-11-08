@@ -16,6 +16,7 @@ object Expr extends ExprLP {
   implicit class ExprPredef[T](expr: Expr[T]) {}
 
   implicit def fromVar[T](v: Variable[T, Unit]): Expr[T] = ???
+  implicit def fromParam[T](v: Param[T, Unit]): Expr[T] = ???
   implicit def int2double(e: Expr[Int]): Expr[Double] = ???
   implicit def double2Int(e: Expr[Double]): Expr[Int] = ???
   implicit def bool2Int(e: Expr[Boolean]): Expr[Int] = ???

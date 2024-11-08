@@ -1,11 +1,11 @@
 package xplat.lib.optimizer
 
-trait ConditionalDomainImpl[F[_], Out] extends ConditionalDomainImplLP {
+trait ConditionalDomainImpl[F[_], Out] extends ConditionalDomainImplLP[F, Out] {
 [2..# implicit def a1[[#A1#, ]]:ConditionDomain.Aux[([#SSet[A1]#, ]), F, Out, ([#A1#, ]) => F[Out], ([#F[A1]#, ]) => F[Out]] = ???
 #
 ]
 }
 
-trait ConditionalDomainImplLP{
-
+trait ConditionalDomainImplLP[F[_], Out]{
+    implicit def a1[A1]:ConditionDomain.Aux[SSet[A1], F, Out, A1 => F[Out], F[A1] => F[Out]] = ???
 }

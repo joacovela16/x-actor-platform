@@ -132,15 +132,18 @@ object Main {
   def maximize[T](expr: Expr[T])(implicit c: IsValidVariable[T]): Free[AMPLCommand, Unit] = ???
 
   def constraint(expr: Expr[Boolean]): Free[AMPLCommand, Unit] = ???
+  def constraint[D](value: D): SubjectTo[D] = ???
 //  def st(expr: Expr[Boolean]): Constraint = subjectTo(expr)
-  def baseOn[D](value: D): SubjectTo[D] = ???
+//  def baseOn[D](value: D): SubjectTo[D] = ???
 
-  final case class SubjectTo[D]() {}
+  final case class SubjectTo[D]() {
+//    def apply[A, H](a:H)(implicit ops: ConditionDomain.Aux[D, Expr, Boolean, A, H]):Free[AMPLCommand, Unit] = ???
+  }
 
   object SubjectTo {
 
     implicit class Predef[D, Apply, Handler](subjectTo: SubjectTo[D])(implicit ops: ConditionDomain.Aux[D, Expr, Boolean, Apply, Handler]) {
-      def where(x: Handler)(expr: Handler): Expr[Boolean] = ???
+      def apply(x: Handler): Free[AMPLCommand, Unit] = ???
     }
 
   }
@@ -170,7 +173,28 @@ object Main {
       _ <- maximize(x * 3 + y * 4)
 
       _ <- constraint(x + y * 2 <= 14)
-      _ <- constraint(x - y <= 10)
+
+      _ <- solve
+    } yield ()
+  }
+
+  model {
+    for {
+      p <- set[Int]
+      a <- param[Int].domain(p)
+      b <- param[Int]
+      c <- param[Int].domain(p)
+      u <- param[Int].domain(p)
+//      p1 <- param[Int].domain(s1).project(x => x * 2)
+
+      x <- variable[Double].domain(p)
+      y <- variable[Double]
+
+      _ <- maximize(sum(p)(j => c(j) * x(j)))
+
+      _ <- constraint(sum(p)(j => (1 / a(j)) + x(j)) <= b)
+      _ <- constraint(p)(j => x(j) <= u(j))
+      _ <- constraint(p)(j => x(j) >= 0)
 
       _ <- solve
     } yield ()
