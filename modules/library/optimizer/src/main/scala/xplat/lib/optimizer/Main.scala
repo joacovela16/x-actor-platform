@@ -8,108 +8,6 @@ import scala.language.implicitConversions
 
 object Main {
 
-  /*
-  val P = solver.set[Int]
-  val M = solver.union(solver.set.of(0), P)
-  val p1 = solver.param[Int].withDomain(P, M).where((p,m) => )
-  val p2 = solver.param[Int].withDomain(P, M).where((p,m) => )
-  val x = solver.var[Int]()
-  val y = solver.var(domain = solver.domain(...), description = "...")
-  solver
-    .minimize(
-      solver.sum()
-    )(
-      solver.st()
-    )
-   */
-
-  case object Solver {
-
-    sealed trait ApplyBuilder[In, Out] {
-      type T
-      def apply(t: T): In => Out
-    }
-
-    object ApplyBuilder {
-      type Aux[In, Out, T0] = ApplyBuilder[In, Out] { type T = T0 }
-
-      implicit def unit[Out]: ApplyBuilder.Aux[Unit, Out, () => Out] = ???
-      implicit def a2[I0, I1, Out]: ApplyBuilder.Aux[(I0, I1), Out, (I0, I1) => Out] = ???
-    }
-
-    final case class DomainContainer[T <: Product]() {
-      def where[A](apply: A)(implicit a: ApplyBuilder.Aux[T, Int, A]): DomainContainer[T] = ???
-    }
-
-    object DomainContainer {
-      val Empty: DomainContainer[Product1[Unit]] = ???
-      def apply[T <: Product](sets: T): DomainContainer[T] = ???
-    }
-
-    trait DomainContainerLP {}
-
-    sealed trait DomainRestriction[T] {}
-
-    object DomainRestriction {
-      final case class Default[T](value: T) extends DomainRestriction[T]
-      final case class Relation[T](value: T, relationType: RelationType) extends DomainRestriction[T]
-    }
-
-    sealed trait RelationType {}
-
-    object RelationType {
-      case object GreatThan extends RelationType
-      case object GreatOrEqualsThan extends RelationType
-      case object LessOrEqualsThan extends RelationType
-      case object LessThan extends RelationType
-    }
-
-    sealed trait AsTuple[A] {
-      type T <: Product
-    }
-
-    trait AsTupleLP {
-
-      implicit def single[T]: AsTuple.Aux[T, Product1[T]] = ???
-    }
-
-    object AsTuple extends AsTupleLP {
-      type Aux[A, T0] = AsTuple[A] { type T = T0 }
-      implicit def default[T <: Product]: AsTuple.Aux[T, T] = ???
-    }
-
-    sealed trait ObjectiveType {}
-
-    object ObjectiveType {
-      case object Minimize extends ObjectiveType
-      case object Maximize extends ObjectiveType
-    }
-
-    final case class LeftExprContainer()
-    final case class FullExprContainer()
-
-    sealed trait Range {}
-
-    object Range {
-      final case class Lower(value: Double) extends Range
-      final case class Upper(value: Double) extends Range
-      final case class Bounded(from: Double, to: Double) extends Range
-    }
-
-    sealed trait Variable {}
-
-    object Variable {
-      final case class Boolean(name: String) extends Variable
-      final case class Integer(name: String, range: Range) extends Variable
-      final case class Double(name: String, range: Range) extends Variable
-    }
-
-    sealed trait Primitive {}
-
-    object Primitive {}
-
-  }
-
   final case class ElseDecl[T]() {
     def Else(condBody: Expr[T]): Expr[T] = ???
     def ElseIf(cond: Expr[Boolean])(condBody: Expr[T]): ElseDecl[T] = ???
@@ -117,7 +15,7 @@ object Main {
 
   def If[T](cond: Expr[Boolean])(thenBody: Expr[T]): ElseDecl[T] = ???
 
-  def set[T](implicit k: Typed[T, Kind], sc: sourcecode.Name): SSet[T] = SSet.Open(sc.value)
+  def set[T](implicit sc: sourcecode.Name): SSet[T] = SSet.Open(sc.value)
   def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Literal(sc.value, head +: tail)
   def union[T](head: SSet[T], tail: SSet[T]*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Union(sc.value, head +: tail)
   def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
@@ -180,15 +78,14 @@ object Main {
 
   model {
     for {
-      p <- set[Int]
+      p <- set[String]
+
       a <- param[Int].domain(p)
       b <- param[Int]
       c <- param[Int].domain(p)
       u <- param[Int].domain(p)
-//      p1 <- param[Int].domain(s1).project(x => x * 2)
 
       x <- variable[Double].domain(p)
-      y <- variable[Double]
 
       _ <- maximize(sum(p)(j => c(j) * x(j)))
 
