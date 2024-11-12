@@ -3,16 +3,10 @@ package xplat.lib.optimizer
 import breeze.linalg.DenseVector
 
 final case class Context(store: Context.Store) {
-  def get(id: String, index: Seq[Int]): Option[Context.Datum] = None
+  def get(id: String, index: Seq[Int]): Option[Datum] = None
 }
 
 object Context {
-  sealed trait Datum {}
-
-  object Datum {
-    final case class DString(value: String) extends Datum
-    final case class DDouble(value: Double) extends Datum
-  }
 
   sealed trait Data
 

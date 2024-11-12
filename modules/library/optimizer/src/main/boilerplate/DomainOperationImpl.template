@@ -1,26 +1,26 @@
 package xplat.lib.optimizer
 
 trait DomainOperationImpl extends DomainOperationImplLP{
-[2..#implicit def a1[[#A1#, ], Out]: DomainOperation.Aux[([#SSet[A1]#, ]), Out, ([#A1#, ]),([#Expr[A1]#, ]), ([#Expr[A1]#, ]) => Expr[Out], ([#Expr[A1]#, ]) => Expr[Boolean]] = new DomainOperation[([#SSet[A1]#, ]), Out]{
+[2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#Expr.Numerical#, ]) => Expr.Numerical, ([#Expr.Numerical#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{
     type Tuple = ([#A1#, ])
-    type TupleExpr = ([#Expr[A1]#, ])
-    type Apply = ([#Expr[A1]#, ]) => Expr[Out]
-    type Conditional = ([#Expr[A1]#, ]) => Expr[Boolean]
-    override def apply(a:Apply): TupleExpr => Expr[Out] = r => a([#r._1#, ])
-    override def conditional(a: Conditional): TupleExpr => Expr[Boolean] = r => a([#r._1#, ])
+    type Apply = ([#Expr.Numerical#, ]) => Expr.Numerical
+    type Conditional = ([#Expr.Numerical#, ]) => Expr.Logical
+    override def asReference(d: ([#SSet[A1]#, ])): Seq[String] = Nil
+    override def apply(a:Apply): Context => Expr.Numerical = x => ???
+    override def conditional(a: Conditional): Context => Expr.Logical = x => ???
 }
 #
 ]
 }
 
 trait DomainOperationImplLP{
-    implicit def a1[A1, Out]: DomainOperation.Aux[SSet[A1], Out, A1, Expr[A1], Expr[A1] => Expr[Out], Expr[A1] => Expr[Boolean]] = new DomainOperation[SSet[A1], Out]{
+    implicit def a1[A1]: DomainOperation.Aux[SSet[A1], A1, Expr.Numerical => Expr.Numerical, Expr.Numerical => Expr.Logical] = new DomainOperation[SSet[A1]]{
         type Tuple = A1
-        type TupleExpr = Expr[A1]
-        type Apply = Expr[A1] => Expr[Out]
-        type Conditional = Expr[A1] => Expr[Boolean]
-        override def apply(a:Apply): TupleExpr => Expr[Out] = a
-        override def conditional(a: Conditional): TupleExpr => Expr[Boolean] = a
+        type Apply = Expr.Numerical => Expr.Numerical
+        type Conditional = Expr.Numerical => Expr.Logical
+        override def asReference(d: SSet[A1]): Seq[String] = Nil
+        override def apply(a:Apply): Context => Expr.Numerical = x => ???
+        override def conditional(a: Conditional): Context => Expr.Logical = x => ???
     }
 
 }

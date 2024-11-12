@@ -1,100 +1,79 @@
 package xplat.lib.optimizer
 
-import cats.effect.IO
-import cats.free.Free
-import cats.~>
-
 import scala.language.implicitConversions
 
 object Main {
 
-  final case class ElseDecl[T]() {
-    def Else(condBody: Expr[T]): Expr[T] = ???
-    def ElseIf(cond: Expr[Boolean])(condBody: Expr[T]): ElseDecl[T] = ???
-  }
+  def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
 
-  def If[T](cond: Expr[Boolean])(thenBody: Expr[T]): ElseDecl[T] = ???
-
-  def set[T](implicit sc: sourcecode.Name): SSet[T] = SSet.Open(sc.value)
+  def set[T](implicit sc: sourcecode.Name, v: Typed[T, ValidType]): SSet[T] = SSet.Open(sc.value)
   def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Literal(sc.value, head +: tail)
   def union[T](head: SSet[T], tail: SSet[T]*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Union(sc.value, head +: tail)
   def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
 
-  def param[T](implicit k: Typed[T, Kind]): Param[T, Unit] = ???
-  def variable[T](implicit k: IsValidVariable[T]): Variable[T, Unit] = variable()
-  def variable[T](lowerBound: Option[T] = None, upperBound: Option[T] = None)(implicit k: IsValidVariable[T]): Variable[T, Unit] = ???
+  def param[T](implicit k: Typed[T, NumberType], sc: sourcecode.Name): Param[T, Unit] = Param(sc.value, k.value)
+  def variable[T](implicit k: IsValidVariable[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = variable()
 
-  def sum[D](value: D): SumExpr[D] = ???
-
-  def minimize[T](expr: Expr[T])(implicit c: IsValidVariable[T]): Model = ???
-  def maximize[T](expr: Expr[T])(implicit c: IsValidVariable[T]): Free[AMPLCommand, Unit] = ???
-
-  def constraint(expr: Expr[Boolean]): Free[AMPLCommand, Unit] = ???
-  def constraint[D](value: D): SubjectTo[D] = ???
-//  def st(expr: Expr[Boolean]): Constraint = subjectTo(expr)
-//  def baseOn[D](value: D): SubjectTo[D] = ???
-
-  final case class SubjectTo[D]() {
-//    def apply[A, H](a:H)(implicit ops: ConditionDomain.Aux[D, Expr, Boolean, A, H]):Free[AMPLCommand, Unit] = ???
+  def variable[T](lowerBound: Option[T] = None, upperBound: Option[T] = None)(implicit k: IsValidVariable[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = {
+    Var(sc.value, t.value, lowerBound.map(k.asDouble), upperBound.map(k.asDouble))
   }
 
-  object SubjectTo {
+  def sum[D](value: D): SumBuilder[D] = SumBuilder(value)
 
-    implicit class Predef[D, Apply, Handler](subjectTo: SubjectTo[D])(implicit ops: ConditionDomain.Aux[D, Expr, Boolean, Apply, Handler]) {
-      def apply(x: Handler): Free[AMPLCommand, Unit] = ???
-    }
+  def minimize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Min, expr, Nil)
+  def maximize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Max, expr, Nil)
+
+  
+
+  def forall[D](value: D): SubjectTo[D] = SubjectTo(value)
+
+  val m1 = {
+    val s1 = set[Int]
+    val p1 = param[Int].domain(s1).project(x => x * 2)
+
+    val x = variable[Double]
+    val y = variable[Double]
+
+    maximize(x * 3 + y * 4)
+      .subjectTo(
+        x + y * 2 <= 14
+      )
+  }
+
+  val m2 = {
+    val s1 = set[Int]
+    val p1 = param[Int].domain(s1).project(x => x * 2)
+
+    val x = variable[Double]
+    val y = variable[Double]
+
+    maximize(x * 3 + y * 4) subjectTo (
+      x + y * 2 <= 14
+    )
+  }
+
+  val m3 = {
+    val P = set[String]
+
+    val a = param[Int].domain(P)
+    val b = param[Int]
+    val c = param[Int].domain(P)
+    val u = param[Int].domain(P)
+
+    val x = variable[Double].domain(P)
+
+    maximize {
+      sum(P)(j => c(j) * x(j))
+    } subjectTo (
+      sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
+      forall(P)(j => x(j) <= u(j)),
+      forall(P)(j => x(j) >= 0)
+    )
 
   }
 
-  implicit def var2free[T, D](variable: Variable[T, D]): Free[AMPLCommand, Variable[T, D]] = ???
-  implicit def par2free[T, D](param: Param[T, D]): Free[AMPLCommand, Param[T, D]] = ???
-  implicit def set2free[T](set: SSet[T]): Free[AMPLCommand, SSet[T]] = ???
-
-  def solve: Free[AMPLCommand, Unit] = ???
-
-  val interpreter: AMPLCommand ~> IO = new (AMPLCommand ~> IO) {
-    override def apply[A](fa: AMPLCommand[A]): IO[A] = ???
-  }
-
-  def model(m: Free[AMPLCommand, Unit]) = {
-    m.foldMap(interpreter)
-  }
-
-  model {
-    for {
-      s1 <- set[Int]
-      p1 <- param[Int].domain(s1).project(x => x * 2)
-
-      x <- variable[Double]
-      y <- variable[Double]
-
-      _ <- maximize(x * 3 + y * 4)
-
-      _ <- constraint(x + y * 2 <= 14)
-
-      _ <- solve
-    } yield ()
-  }
-
-  model {
-    for {
-      p <- set[String]
-
-      a <- param[Int].domain(p)
-      b <- param[Int]
-      c <- param[Int].domain(p)
-      u <- param[Int].domain(p)
-
-      x <- variable[Double].domain(p)
-
-      _ <- maximize(sum(p)(j => c(j) * x(j)))
-
-      _ <- constraint(sum(p)(j => (1 / a(j)) + x(j)) <= b)
-      _ <- constraint(p)(j => x(j) <= u(j))
-      _ <- constraint(p)(j => x(j) >= 0)
-
-      _ <- solve
-    } yield ()
+  def main(args: Array[String]): Unit = {
+    pprint.pprintln(m1)
   }
 
 }

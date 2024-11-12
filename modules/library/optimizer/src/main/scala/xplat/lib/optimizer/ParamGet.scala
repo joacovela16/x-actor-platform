@@ -1,10 +1,10 @@
 package xplat.lib.optimizer
 
-trait ParamGet[Domain, Out] {
+trait ParamGet[Domain] {
   type Apply <: Product
-  def apply(a: Apply): Expr[Out]
+  def apply(a: Apply): Expr.Numerical
 }
 
 object ParamGet extends ParamGetImpl {
-  type Aux[Domain,Out, Apply0] = ParamGet[Domain, Out] { type Apply = Apply0 }
+  type Aux[Domain, Apply0] = ParamGet[Domain] { type Apply = Apply0 }
 }
