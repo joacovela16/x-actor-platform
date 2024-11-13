@@ -96,7 +96,7 @@ lazy val root = (project in file("."))
   .aggregate(sqlitePersistence, optLibCore)
   .dependsOn(sqlitePersistence, optLibCore)
   .settings(
-    name := "x-actor-alive",
+    name := "x-actor-platform",
     commonsSettings
   )
 

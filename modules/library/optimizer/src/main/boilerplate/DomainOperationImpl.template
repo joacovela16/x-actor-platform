@@ -1,26 +1,32 @@
 package xplat.lib.optimizer
 
 trait DomainOperationImpl extends DomainOperationImplLP{
-[2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#Expr.Numerical#, ]) => Expr.Numerical, ([#Expr.Numerical#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{
+[2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#A1#, ]) => Expr.Numerical, ([#A1#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{
     type Tuple = ([#A1#, ])
-    type Apply = ([#Expr.Numerical#, ]) => Expr.Numerical
-    type Conditional = ([#Expr.Numerical#, ]) => Expr.Logical
+    type Apply = ([#A1#, ]) => Expr.Numerical
+    type Conditional = ([#A1#, ]) => Expr.Logical
     override def asReference(d: ([#SSet[A1]#, ])): Seq[String] = Nil
     override def apply(a:Apply): Context => Expr.Numerical = x => ???
     override def conditional(a: Conditional): Context => Expr.Logical = x => ???
+    override def asStream(d: ([#SSet[A1]#, ]), c:Context): LazyList[Context] = {
+        c.[#d._1# .]
+    }
 }
 #
 ]
 }
 
 trait DomainOperationImplLP{
-    implicit def a1[A1]: DomainOperation.Aux[SSet[A1], A1, Expr.Numerical => Expr.Numerical, Expr.Numerical => Expr.Logical] = new DomainOperation[SSet[A1]]{
+    implicit def a1[A1]: DomainOperation.Aux[SSet[A1], A1, A1 => Expr.Numerical, A1 => Expr.Logical] = new DomainOperation[SSet[A1]]{
         type Tuple = A1
-        type Apply = Expr.Numerical => Expr.Numerical
-        type Conditional = Expr.Numerical => Expr.Logical
-        override def asReference(d: SSet[A1]): Seq[String] = Nil
+        type Apply = A1 => Expr.Numerical
+        type Conditional = A1 => Expr.Logical
+        override def asReference(d: SSet[A1]): Seq[String] = Seq(d.id)
         override def apply(a:Apply): Context => Expr.Numerical = x => ???
         override def conditional(a: Conditional): Context => Expr.Logical = x => ???
+        override def asStream(d: SSet[A1], c: Context): LazyList[Context] = {
+            ???
+        }
     }
 
 }

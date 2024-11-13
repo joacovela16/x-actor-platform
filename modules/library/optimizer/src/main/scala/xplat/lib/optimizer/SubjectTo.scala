@@ -9,8 +9,8 @@ object SubjectTo {
   )(implicit ops: DomainOperation.Aux[D, T, Apply, Cond]) {
     def apply(x: Cond): Expr.Logical = Expr.Logical.Forall(ops.asReference(subjectTo.domain), _ => true, ops.conditional(x))
 
-    def where(x: Cond)(y: Apply): Expr.Logical = {
-      Expr.Logical.Forall(ops.asReference(subjectTo.domain), ops.conditional(x), ops(y))
+    def where(x: Cond)(y: Cond): Expr.Logical = {
+      Expr.Logical.Forall(ops.asReference(subjectTo.domain), ops.conditional(x), ops.conditional(y))
     }
 
   }

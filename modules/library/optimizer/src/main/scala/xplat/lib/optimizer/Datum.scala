@@ -2,7 +2,19 @@ package xplat.lib.optimizer
 
 import scala.language.implicitConversions
 
-sealed trait Datum {}
+sealed trait Datum {
+
+  def asNumber: Option[Double] = this match {
+    case Datum.DDouble(value) => Option(value)
+    case _                    => None
+  }
+
+  def asString: Option[String] = this match {
+    case Datum.DString(value) => Option(value)
+    case _                    => None
+  }
+
+}
 
 object Datum {
   final case class DString(value: String) extends Datum
@@ -12,4 +24,17 @@ object Datum {
   implicit def fromNumber(d: Int): Datum = DDouble(d)
   implicit def fromBoolean(d: Boolean): Datum = DDouble(if (d) 1 else 0)
   implicit def fromString(d: String): Datum = DString(d)
+
+  trait Codec[T] {
+    def asDatum(value: T): Datum
+  }
+
+  object Codec {
+    def apply[T](implicit c: Codec[T]): Codec[T] = c
+    implicit def fromDouble: Codec[Double] = v => v
+    implicit def fromInt: Codec[Int] = v => v
+    implicit def fromBoolean: Codec[Boolean] = v => v
+    implicit def fromString: Codec[String] = v => v
+  }
+
 }

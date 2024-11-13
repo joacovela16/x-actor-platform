@@ -3,12 +3,13 @@ package xplat.lib.optimizer
 import scala.language.implicitConversions
 
 object Main {
+  implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(v.id, Nil, v.asDecl)
 
   def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
 
   def set[T](implicit sc: sourcecode.Name, v: Typed[T, ValidType]): SSet[T] = SSet.Open(sc.value)
-  def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Literal(sc.value, head +: tail)
-  def union[T](head: SSet[T], tail: SSet[T]*)(implicit sc: sourcecode.Name): SSet[T] = SSet.Union(sc.value, head +: tail)
+  def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name, v: Typed[T, ValidType]): SSet[T] = SSet.Literal(sc.value, head +: tail)
+  def union[T](head: SSet[T], tail: SSet[T]*)(implicit sc: sourcecode.Name, v: Typed[T, ValidType]): SSet[T] = SSet.Union(sc.value, head +: tail)
   def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
 
   def param[T](implicit k: Typed[T, NumberType], sc: sourcecode.Name): Param[T, Unit] = Param(sc.value, k.value)
@@ -22,8 +23,6 @@ object Main {
 
   def minimize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Min, expr, Nil)
   def maximize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Max, expr, Nil)
-
-  
 
   def forall[D](value: D): SubjectTo[D] = SubjectTo(value)
 
@@ -62,9 +61,7 @@ object Main {
 
     val x = variable[Double].domain(P)
 
-    maximize {
-      sum(P)(j => c(j) * x(j))
-    } subjectTo (
+    maximize(sum(P)(j => c(j) * x(j))).subjectTo(
       sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
       forall(P)(j => x(j) <= u(j)),
       forall(P)(j => x(j) >= 0)
@@ -73,7 +70,7 @@ object Main {
   }
 
   def main(args: Array[String]): Unit = {
-    pprint.pprintln(m1)
+    pprint.pprintln(m3)
   }
 
 }

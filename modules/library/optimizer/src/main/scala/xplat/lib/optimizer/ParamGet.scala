@@ -1,8 +1,8 @@
 package xplat.lib.optimizer
 
 trait ParamGet[Domain] {
-  type Apply <: Product
-  def apply(a: Apply): Expr.Numerical
+  type Apply
+  def apply(a: Apply): Seq[Datum]
 }
 
 object ParamGet extends ParamGetImpl {

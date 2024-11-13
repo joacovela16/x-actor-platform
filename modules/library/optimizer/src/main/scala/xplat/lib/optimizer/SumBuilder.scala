@@ -4,11 +4,7 @@ final case class SumBuilder[D](domain: D)
 
 object SumBuilder {
 
-  implicit class Predef[D, Tuple, Apply, Conditional](
-      data: SumBuilder[D]
-  )(implicit
-      ops: DomainOperation.Aux[D, Tuple, Apply, Conditional]
-  ) {
+  implicit class Predef[D, Tuple, Apply, Conditional](data: SumBuilder[D])(implicit ops: DomainOperation.Aux[D, Tuple, Apply, Conditional]) {
 
     def where(a: Conditional): Dummy[D, Tuple, Apply, Conditional] = {
       Dummy(data.domain, a, ops)
@@ -18,6 +14,7 @@ object SumBuilder {
       val ref = ops.asReference(data.domain)
       Expr.Numerical.Sum(ref, _ => true, ops(a))
     }
+
   }
 
   final case class Dummy[D, Tuple, Apply, Conditional](data: D, cond: Conditional, ops: DomainOperation.Aux[D, Tuple, Apply, Conditional]) {
