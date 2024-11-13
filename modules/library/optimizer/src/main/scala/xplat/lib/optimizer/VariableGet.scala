@@ -2,7 +2,7 @@ package xplat.lib.optimizer
 
 trait VariableGet[Domain] {
   type Apply
-  def apply(a: Apply): Expr.Numerical
+  def apply(a: Apply): Seq[Int]
 }
 
 object VariableGet extends VarGetImpl {

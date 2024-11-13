@@ -6,7 +6,7 @@ final case class Param[T, Domain](
     id: String,
     kind: NumberType,
     domain: Seq[String] = Nil,
-    transform: Option[Context => Expr.Numerical] = None
+    transform: Option[Expr.Numerical] = None
 ) {
 
   def domain[Domain0](value: Domain0)(implicit ops: DomainOperation[Domain0]): Param[T, ops.Tuple] = {
@@ -35,10 +35,10 @@ object Param {
 
   }
 
-  implicit class GetPredef[T, D, Apply](param: Param[T, D])(implicit get: ParamGet.Aux[D, Apply]) {
-    def apply(a: Apply): Expr.Numerical = Expr.Numerical.GetParam(param.id, get(a), param.asDecl)
+  implicit class Get[T, D, Apply](param: Param[T, D])(implicit get: ParamGet.Aux[D, Apply]) {
+    def apply(a: Apply): Expr.Numerical = Expr.Numerical.GetParam(get(a), param.asDecl)
   }
 
-  implicit def mk[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.GetParam(v.id, Nil, v.asDecl)
+  implicit def mk[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.GetParam(Nil, v.asDecl)
 
 }

@@ -36,48 +36,11 @@ final case class Var[T, Domain](
 
 object Var {
 
-  implicit class Get[T, D, Apply](param: Var[T, D])(implicit get: VariableGet.Aux[D, Apply]) {
-    def apply(a: Apply): Expr.Numerical = get(a)
-  }
-
-
-
-  /*
-  implicit class Predef[T](v: Var[T, Unit]) {
-
-    def +(other: Expr.Numerical): Expr.Numerical = {
-      Expr.Numerical.Binary(Expr.Numerical.GetVar(v.id, Nil, v.asDecl), other, BinaryOperator.Plus)
-    }
-
-    def *(other: Expr.Numerical): Expr.Numerical = {
-      Expr.Numerical.Binary(Expr.Numerical.GetVar(v.id, Nil, v.asDecl), other, BinaryOperator.Times)
-    }
-
-    def -(other: Expr.Numerical): Expr.Numerical = {
-      Expr.Numerical.Binary(Expr.Numerical.GetVar(v.id, Nil, v.asDecl), other, BinaryOperator.Minus)
-    }
-
-    def /(other: Expr.Numerical): Expr.Numerical = {
-      Expr.Numerical.Binary(Expr.Numerical.GetVar(v.id, Nil, v.asDecl), other, BinaryOperator.Divide)
-    }
-
-    def <=(other: Expr.Numerical): Expr.Logical = {
-      Expr.Logical.Relation(Expr.Numerical.GetParam(v.id, Nil, v.asDecl), other, BinaryRelation.LessEqual)
-    }
-
-    def <(other: Expr.Numerical): Expr.Logical = {
-      Expr.Logical.Relation(Expr.Numerical.GetParam(v.id, Nil, v.asDecl), other, BinaryRelation.Less)
-    }
-
-    def >=(other: Expr.Numerical): Expr.Logical = {
-      Expr.Logical.Relation(Expr.Numerical.GetParam(v.id, Nil, v.asDecl), other, BinaryRelation.GreatEqual)
-    }
-
-    def >(other: Expr.Numerical): Expr.Logical = {
-      Expr.Logical.Relation(Expr.Numerical.GetParam(v.id, Nil, v.asDecl), other, BinaryRelation.Great)
+  implicit class Get[T, D, Apply](v: Var[T, D])(implicit get: VariableGet.Aux[D, Apply]) {
+    def apply(a: Apply): Expr.Numerical = {
+      Expr.Numerical.GetVar(get(a), v.asDecl)
     }
 
   }
-   */
 
 }

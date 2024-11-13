@@ -5,6 +5,9 @@ import scala.language.implicitConversions
 sealed trait Expr
 
 object Expr {
+
+  final case class Ref(index: Int)
+
   sealed trait Declaration extends Expr
 
   object Declaration {
@@ -21,7 +24,7 @@ object Expr {
         id: String,
         kind: NumberType,
         domain: Seq[String] = Nil,
-        transform: Option[Context => Expr.Numerical] = None
+        transform: Option[Expr.Numerical] = None
     ) extends Expr.Declaration
 
   }
@@ -29,32 +32,32 @@ object Expr {
   sealed trait Statement extends Expr
 
   object Statement {
-    final case class If[T](cond: Expr.Logical, thenBody: Expr.Numerical, elseIf: Seq[(Expr.Logical, Expr.Numerical)], elseBody: Expr.Numerical) extends Expr.Statement
-    final case class Switch[R, T](access: Expr.Statement, cases: Seq[(Expr.Logical, Expr.Numerical)], defaultBody: Expr.Numerical) extends Expr.Statement
+    final case class If(cond: Expr.Logical, thenBody: Expr.Numerical, elseIf: Seq[(Expr.Logical, Expr.Numerical)], elseBody: Expr.Numerical) extends Expr.Statement
+    final case class Switch(access: Expr.Statement, cases: Seq[(Expr.Logical, Expr.Numerical)], defaultBody: Expr.Numerical) extends Expr.Statement
   }
 
   sealed trait Numerical extends Expr {
-    def +(other: Numerical): Numerical = Expr.Numerical.Binary(this, other, BinaryOperator.Plus)
-    def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, other, BinaryOperator.Times)
-    def *(other: Double): Numerical = Expr.Numerical.Binary(this, other, BinaryOperator.Times)
-    def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, other, BinaryOperator.Minus)
-    def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, other, BinaryOperator.Divide)
-    def <=(other: Numerical): Logical = Expr.Logical.Relation(this, other, BinaryRelation.LessEqual)
-    def >=(other: Numerical): Logical = Expr.Logical.Relation(this, other, BinaryRelation.GreatEqual)
-    def >(other: Numerical): Logical = Expr.Logical.Relation(this, other, BinaryRelation.Great)
-    def <(other: Numerical): Logical = Expr.Logical.Relation(this, other, BinaryRelation.Less)
+    def +(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Plus, other)
+    def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Times, other)
+    def *(other: Double): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Times, other)
+    def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Minus, other)
+    def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Divide, other)
+    def <=(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.LessEqual, other)
+    def >=(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.GreatEqual, other)
+    def >(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Great, other)
+    def <(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Less, other)
   }
 
   object Numerical {
-    final case class Binary(left: Expr.Numerical, right: Expr.Numerical, operator: BinaryOperator) extends Expr.Numerical
-    final case class Sum(domain: Seq[String], condition: Context => Expr.Logical, body: Context => Expr.Numerical) extends Expr.Numerical
+    final case class Binary(left: Numerical, operator: BinaryOperator, right: Numerical) extends Expr.Numerical
+    final case class Sum(domain: Seq[String], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
 
-    final case class GetParam(id: String, references: Seq[Datum], decl: Expr.Declaration) extends Expr.Numerical
-    final case class GetVar(id: String, references: Seq[Datum], decl: Expr.Declaration) extends Expr.Numerical
+    final case class GetParam(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
+    final case class GetVar(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
     final case class Constant(data: Double) extends Expr.Numerical
 
     implicit def mk(d: Double): Expr.Numerical = Expr.Numerical.Constant(d)
-//    implicit def mk(d: Int): Expr.Numerical = Expr.Numerical.Constant(d)
+    implicit def mk(d: Int): Expr.Numerical = Expr.Numerical.Constant(d)
     implicit def mk(d: Boolean): Expr.Numerical = Expr.Numerical.Constant(if (d) 1 else 0)
 
   }
@@ -62,9 +65,9 @@ object Expr {
   sealed trait Logical extends Expr
 
   object Logical {
-    final case class Forall(domain: Seq[String], condition: Context => Expr.Logical, body: Context => Expr.Logical) extends Expr.Logical
-    final case class Binary(left: Expr.Logical, right: Expr.Logical, operator: BinaryLogicalOperator) extends Expr.Logical
-    final case class Relation(left: Expr.Numerical, right: Expr.Numerical, operator: BinaryRelation) extends Expr.Logical
+    final case class Forall(domain: Seq[String], condition: Expr.Logical, body: Expr.Logical) extends Expr.Logical
+    final case class Binary(left: Logical, operator: BinaryLogicalOperator, right: Logical) extends Expr.Logical
+    final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Logical
     final case class Unary(expr: Expr.Logical) extends Expr.Logical
     final case class Constant(data: Boolean) extends Expr.Logical
 

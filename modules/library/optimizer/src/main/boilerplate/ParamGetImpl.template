@@ -1,9 +1,9 @@
 package xplat.lib.optimizer
 
 trait ParamGetImpl extends ParamGetImplLP{
-[2..#implicit def a1[[#A1:Datum.Codec#, ]]: ParamGet.Aux[([#A1#, ]), ([#A1#, ])] = new ParamGet[([#A1#, ])]{
-    type Apply = ([#A1#, ])
-    def apply(a: Apply): Seq[Datum] = Seq([#Datum.Codec[A1].asDatum(a._1)#, ])
+[2..#implicit def a1[[#A1#, ]]: ParamGet.Aux[([#A1#, ]), ([#Arg[A1]#, ])] = new ParamGet[([#A1#, ])]{
+    type Apply = ([#Arg[A1]#, ])
+    def apply(a: Apply): Seq[Int] = Seq([#a._1.index#])
 }
 
 #
@@ -11,5 +11,8 @@ trait ParamGetImpl extends ParamGetImplLP{
 }
 
 trait ParamGetImplLP{
-    implicit def a1[A1]: ParamGet.Aux[A1, A1] = ???
+    implicit def a1[A1]: ParamGet.Aux[A1, Arg[A1]] = new ParamGet[A1]{
+        type Apply = Arg[A1]
+        def apply(a: Apply): Seq[Int] = Seq(a.index)
+    }
 }

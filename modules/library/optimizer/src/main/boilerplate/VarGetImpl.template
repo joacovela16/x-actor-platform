@@ -1,12 +1,12 @@
 package xplat.lib.optimizer
 
 trait VarGetImpl extends VarGetImplLP{
-[2..#implicit def a1[[#A1:Datum.Codec#, ]]: VariableGet.Aux[([#A1#, ]), ([#A1#, ])] = ???
+[2..#implicit def a1[[#A1#, ]]: VariableGet.Aux[([#A1#, ]), ([#Arg[A1]#, ])] = x => Seq([#x._1.index#, ])
 
 #
 ]
 }
 
 trait VarGetImplLP{
-    implicit def a1[A1:Datum.Codec]: VariableGet.Aux[A1, A1] = ???
+    implicit def a1[A1]: VariableGet.Aux[A1, Arg[A1]] = x => Seq(x.index)
 }

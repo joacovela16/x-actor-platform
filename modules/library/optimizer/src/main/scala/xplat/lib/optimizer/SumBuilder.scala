@@ -12,7 +12,7 @@ object SumBuilder {
 
     def apply(a: Apply): Expr.Numerical = {
       val ref = ops.asReference(data.domain)
-      Expr.Numerical.Sum(ref, _ => true, ops(a))
+      Expr.Numerical.Sum(ref, true, ops(a))
     }
 
   }

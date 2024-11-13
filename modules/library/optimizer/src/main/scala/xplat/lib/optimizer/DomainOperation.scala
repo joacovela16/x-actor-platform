@@ -6,8 +6,8 @@ trait DomainOperation[Domain] {
   type Conditional
   def asReference(d: Domain): Seq[String]
   def asStream(d: Domain, c: Context): LazyList[Context]
-  def apply(a: Apply): Context => Expr.Numerical
-  def conditional(a: Conditional): Context => Expr.Logical
+  def apply(a: Apply): Expr.Numerical
+  def conditional(a: Conditional): Expr.Logical
 }
 
 object DomainOperation extends DomainOperationImpl {

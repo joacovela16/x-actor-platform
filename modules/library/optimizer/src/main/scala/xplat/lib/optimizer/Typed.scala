@@ -7,9 +7,9 @@ object Typed {
   implicit val bool: Typed[Boolean, NumberType] = Typed(NumberType.Boolean)
   implicit val double: Typed[Double, NumberType] = Typed(NumberType.Double)
 
-  implicit val validInt: Typed[Int, ValidType] = Typed(ValidType.Number)
-  implicit val validDouble: Typed[Double, ValidType] = Typed(ValidType.Number)
-  implicit val validBoolean: Typed[Boolean, ValidType] = Typed(ValidType.Number)
-  implicit val validString: Typed[String, ValidType] = Typed(ValidType.String)
+  implicit val validInt: Typed[Int, DomainType] = Typed(DomainType.Number)
+  implicit val validDouble: Typed[Double, DomainType] = Typed(DomainType.Number)
+  implicit val validBoolean: Typed[Boolean, DomainType] = Typed(DomainType.Number)
+  implicit val validString: Typed[String, DomainType] = Typed(DomainType.String)
 
 }
