@@ -23,8 +23,7 @@ lazy val optLibCore = (project in file("./modules/library/optimizer"))
   .settings(
     name := "optimizer",
     libraryDependencies ++= Seq(
-//      Dependencies.Compile.scalaReflect,
-//      Dependencies.Compile.catsFS2,
+      Dependencies.Compile.catsFS2,
       Dependencies.Compile.cats,
       Dependencies.Compile.catsEffects,
       Dependencies.Compile.sourcecode,

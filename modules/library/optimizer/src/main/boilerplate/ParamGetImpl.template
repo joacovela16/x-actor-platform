@@ -1,4 +1,4 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 trait ParamGetImpl extends ParamGetImplLP{
 [2..#implicit def a1[[#A1#, ]]: ParamGet.Aux[([#A1#, ]), ([#Arg[A1]#, ])] = new ParamGet[([#A1#, ])]{

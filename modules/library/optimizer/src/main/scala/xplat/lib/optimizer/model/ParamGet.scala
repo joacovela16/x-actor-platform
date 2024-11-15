@@ -1,4 +1,6 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
+
+import xplat.lib.optimizer.model.ParamGetImpl
 
 trait ParamGet[Domain] {
   type Apply

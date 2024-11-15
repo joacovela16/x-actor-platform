@@ -1,4 +1,4 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import scala.language.implicitConversions
 
@@ -7,7 +7,7 @@ final case class Var[T, Domain](
     kind: NumberType,
     lowerBound: Option[Double] = None,
     upperBound: Option[Double] = None,
-    domain: Seq[String] = Nil
+    domain: Seq[SetDecl] = Nil
 ) {
 
   def domain[Domain0](value: Domain0)(implicit ops: DomainOperation[Domain0]): Var[T, ops.Tuple] = {

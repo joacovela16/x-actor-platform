@@ -1,10 +1,12 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import scala.language.implicitConversions
 
 sealed trait Datum {
 
-  def asNumber: Option[Double] = this match {
+  def asNumber: Option[Double] = this
+  /** EndMarker */
+  match {
     case Datum.DDouble(value) => Option(value)
     case _                    => None
   }

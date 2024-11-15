@@ -1,11 +1,11 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import scala.language.implicitConversions
 
 final case class Param[T, Domain](
     id: String,
     kind: NumberType,
-    domain: Seq[String] = Nil,
+    domain: Seq[SetDecl] = Nil,
     transform: Option[Expr.Numerical] = None
 ) {
 

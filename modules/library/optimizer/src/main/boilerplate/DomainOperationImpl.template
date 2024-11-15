@@ -1,11 +1,11 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 trait DomainOperationImpl extends DomainOperationImplLP{
 [2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#Arg[A1]#, ]) => Expr.Numerical, ([#Arg[A1]#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{
     type Tuple = ([#A1#, ])
     type Apply = ([#Arg[A1]#, ]) => Expr.Numerical
     type Conditional = ([#Arg[A1]#, ]) => Expr.Logical
-    override def asReference(d: ([#SSet[A1]#, ])): Seq[String] = Nil
+    override def asReference(d: ([#SSet[A1]#, ])): Seq[SetDecl] = Seq([#d._1.asDecl#])
     override def apply(a:Apply): Expr.Numerical = a([#Arg(0)#, ])
     override def conditional(a: Conditional): Expr.Logical = a([#Arg(0)#, ])
     override def asStream(d: ([#SSet[A1]#, ]), c:Context): LazyList[Context] = {
@@ -21,7 +21,7 @@ trait DomainOperationImplLP{
         type Tuple = A1
         type Apply = Arg[A1] => Expr.Numerical
         type Conditional = Arg[A1] => Expr.Logical
-        override def asReference(d: SSet[A1]): Seq[String] = Seq(d.id)
+        override def asReference(d: SSet[A1]): Seq[SetDecl] = Seq(d.asDecl)
         override def apply(a:Apply): Expr.Numerical = a(Arg(0))
         override def conditional(a: Conditional): Expr.Logical = a(Arg(0))
         override def asStream(d: SSet[A1], c: Context): LazyList[Context] = {

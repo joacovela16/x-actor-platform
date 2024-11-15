@@ -1,4 +1,4 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 sealed trait BinaryLogicalOperator {}
 

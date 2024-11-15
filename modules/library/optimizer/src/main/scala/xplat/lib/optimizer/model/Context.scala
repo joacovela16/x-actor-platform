@@ -1,8 +1,8 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import breeze.linalg.DenseVector
 import com.softwaremill.quicklens.ModifyPimp
-import xplat.lib.optimizer.Context.Data
+import xplat.lib.optimizer.model.Context.Data
 
 final case class Context(store: Context.Store) {
   private val data = store.data

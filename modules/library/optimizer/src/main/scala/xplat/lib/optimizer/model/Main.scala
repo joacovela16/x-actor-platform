@@ -1,16 +1,15 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import scala.language.implicitConversions
 
 object Main {
-  implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar( Nil, v.asDecl)
+  implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
 //  implicit def mk[T](v: Arg[T]): Expr.Numerical = ???
 
   def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
 
   def set[T](implicit sc: sourcecode.Name, v: Typed[T, DomainType]): SSet[T] = SSet.Open(sc.value)
-  def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name, v: Typed[T, DomainType]): SSet[T] = SSet.Literal(sc.value, head +: tail)
-  def union[T](head: SSet[T], tail: SSet[T]*)(implicit sc: sourcecode.Name, v: Typed[T, DomainType]): SSet[T] = SSet.Union(sc.value, head +: tail)
+  def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name, c: Datum.Codec[T]): SSet[T] = SSet.Literal(sc.value, head +: tail, c)
   def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
 
   def param[T](implicit k: Typed[T, NumberType], sc: sourcecode.Name): Param[T, Unit] = Param(sc.value, k.value)
@@ -28,7 +27,7 @@ object Main {
   def forall[D](value: D): SubjectTo[D] = SubjectTo(value)
 
   val m1 = {
-    val s1 = set[Int]
+//    val s1 = set[Int]
     // val p1 = param[Int].domain(s1).project(x => x * 2)
 
     val x = variable[Double]
@@ -41,7 +40,7 @@ object Main {
   }
 
   val m2 = {
-    val s1 = set[Int]
+//    val s1 = set[Int]
 //    val p1 = param[Int].domain(s1).project(x => x * 2)
 
     val x = variable[Double]

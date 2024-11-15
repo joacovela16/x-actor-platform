@@ -1,10 +1,10 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 trait DomainOperation[Domain] {
   type Tuple
   type Apply
   type Conditional
-  def asReference(d: Domain): Seq[String]
+  def asReference(d: Domain): Seq[SetDecl]
   def asStream(d: Domain, c: Context): LazyList[Context]
   def apply(a: Apply): Expr.Numerical
   def conditional(a: Conditional): Expr.Logical

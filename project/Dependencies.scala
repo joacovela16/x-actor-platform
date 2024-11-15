@@ -3,28 +3,28 @@ import sbt.*
 object Dependencies {
 
   object Versions {
-    val scalaVersion = "2.13.14"
+    val scalaVersion = "2.13.15"
 
-    val quicklens: String = "1.9.7"
+    val quicklens: String = "1.9.9"
     val chill: String = "0.10.0"
 
-    val circe: String = "0.14.9"
+    val circe: String = "0.14.10"
     val config: String = "1.4.2"
     val ficusversion: String = "1.5.2"
 
-    val logbackClassic: String = "1.5.7"
+    val logbackClassic: String = "1.5.12"
     val scalaLogging: String = "3.9.5"
 
-    val catsEffects: String = "3.5.4"
+    val catsEffects: String = "3.5.5"
     val cats: String = "2.12.0"
     val catsFS2: String = "3.11.0"
     val catsLogger: String = "2.7.0"
-    val catsMtl: String = "1.4.0"
+    val catsMtl: String = "1.5.0"
 
     val quill: String = "4.8.0"
-    val sqliteDriver: String = "3.46.0.0"
+    val sqliteDriver: String = "3.47.0.0"
     val mysqlDriver: String = "8.0.33"
-    val h2Driver: String = "2.2.224"
+    val h2Driver: String = "2.3.232"
 
     val catsSelfLogger: String = "2.7.0"
     val slf4j: String = "2.0.9"

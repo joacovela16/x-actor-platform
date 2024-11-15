@@ -1,8 +1,6 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
-sealed trait BinaryOperator {
-
-}
+sealed trait BinaryOperator {}
 
 object BinaryOperator {
   case object Plus extends BinaryOperator

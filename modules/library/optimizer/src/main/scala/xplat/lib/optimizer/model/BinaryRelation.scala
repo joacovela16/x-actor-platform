@@ -1,8 +1,6 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
-sealed trait BinaryRelation {
-
-}
+sealed trait BinaryRelation {}
 
 object BinaryRelation {
   case object Equals extends BinaryRelation

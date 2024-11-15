@@ -1,4 +1,4 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import scala.language.implicitConversions
 
@@ -17,15 +17,16 @@ object Expr {
         kind: NumberType,
         lowerBound: Option[Double] = None,
         upperBound: Option[Double] = None,
-        domain: Seq[String] = Nil
+        domain: Seq[SetDecl] = Nil
     ) extends Expr.Declaration
 
     final case class ParamDecl(
         id: String,
         kind: NumberType,
-        domain: Seq[String] = Nil,
+        domain: Seq[SetDecl] = Nil,
         transform: Option[Expr.Numerical] = None
     ) extends Expr.Declaration
+
 
   }
 
@@ -50,7 +51,7 @@ object Expr {
 
   object Numerical {
     final case class Binary(left: Numerical, operator: BinaryOperator, right: Numerical) extends Expr.Numerical
-    final case class Sum(domain: Seq[String], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
+    final case class Sum(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
 
     final case class GetParam(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
     final case class GetVar(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
@@ -65,7 +66,7 @@ object Expr {
   sealed trait Logical extends Expr
 
   object Logical {
-    final case class Forall(domain: Seq[String], condition: Expr.Logical, body: Expr.Logical) extends Expr.Logical
+    final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Logical
     final case class Binary(left: Logical, operator: BinaryLogicalOperator, right: Logical) extends Expr.Logical
     final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Logical
     final case class Unary(expr: Expr.Logical) extends Expr.Logical

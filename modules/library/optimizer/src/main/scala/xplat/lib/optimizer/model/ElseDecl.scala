@@ -1,4 +1,4 @@
-package xplat.lib.optimizer
+package xplat.lib.optimizer.model
 
 import com.softwaremill.quicklens.ModifyPimp
 
