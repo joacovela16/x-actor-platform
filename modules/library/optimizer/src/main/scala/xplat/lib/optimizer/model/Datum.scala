@@ -33,10 +33,10 @@ object Datum {
 
   object Codec {
     def apply[T](implicit c: Codec[T]): Codec[T] = c
-    implicit def fromDouble: Codec[Double] = v => v
-    implicit def fromInt: Codec[Int] = v => v
-    implicit def fromBoolean: Codec[Boolean] = v => v
-    implicit def fromString: Codec[String] = v => v
+    implicit def mkDouble: Codec[Double] = v => v
+    implicit def mkInt: Codec[Int] = v => v
+    implicit def mkBoolean: Codec[Boolean] = v => v
+    implicit def mkString: Codec[String] = v => v
   }
 
 }

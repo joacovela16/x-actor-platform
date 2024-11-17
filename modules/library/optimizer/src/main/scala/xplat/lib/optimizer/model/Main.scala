@@ -67,8 +67,23 @@ object Main {
 
   }
 
+  val m4 = {
+    val S1 = set[String]
+    val S2 = set[String]
+    val P1 = param[Int].domain(S1, S2)
+    val P2 = param[Int]
+    Context().put(P1)(
+      ("1", "1") -> 1,
+      ("1", "2") -> 2,
+      ("2", "1") -> 3,
+      ("2", "2") -> 4
+    )
+    Context().put(P2, 3)
+  }
+
   def main(args: Array[String]): Unit = {
     pprint.pprintln(m3)
+
   }
 
 }
