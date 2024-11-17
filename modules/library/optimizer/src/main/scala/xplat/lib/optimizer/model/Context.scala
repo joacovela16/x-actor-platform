@@ -10,6 +10,21 @@ final case class Context(store: Context.Store) {
   def getNumber(id: String): Option[Double] = get(id).collect { case Datum.DDouble(value) => value }
   def getStream(id: String): LazyList[Datum] = data.get(id).collect { case Data.Stream(data) => data }.getOrElse(LazyList.empty)
 
+  def getSize(id: String): Long = {
+    data.get(id) match {
+      case Some(d) =>
+        d match {
+          case Data.Single(_)     => 1
+          case Data.Stream(data)  => data.size
+          case Data.Vector(data)  => data.size
+          case Data.Matrix2(data) => data.size
+          case Data.Matrix3(data) => data.size
+          case Data.Matrix4(data) => data.size
+        }
+      case None => 0L
+    }
+  }
+
   def put[D](s: SSet[D], head: D, tail: D*)(implicit b: Context.DataBuilder.Aux[SSet[D], Seq[D]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
   def put[T, D](s: Param[T, D])(head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
   def put[D](s: Param[D, Unit], v: D)(implicit b: Context.DataBuilder.Aux[Param[D, Unit], D]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(v)))

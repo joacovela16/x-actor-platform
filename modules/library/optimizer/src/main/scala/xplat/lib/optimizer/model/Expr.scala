@@ -27,7 +27,6 @@ object Expr {
         transform: Option[Expr.Numerical] = None
     ) extends Expr.Declaration
 
-
   }
 
   sealed trait Statement extends Expr
@@ -67,9 +66,7 @@ object Expr {
 
   object Logical {
     final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Logical
-    final case class Binary(left: Logical, operator: BinaryLogicalOperator, right: Logical) extends Expr.Logical
     final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Logical
-    final case class Unary(expr: Expr.Logical) extends Expr.Logical
     final case class Constant(data: Boolean) extends Expr.Logical
 
     implicit def mk(v: Boolean): Expr.Logical = Expr.Logical.Constant(v)

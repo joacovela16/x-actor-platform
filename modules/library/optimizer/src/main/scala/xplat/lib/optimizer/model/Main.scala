@@ -1,5 +1,8 @@
 package xplat.lib.optimizer.model
 
+import cats.Id
+import xplat.lib.optimizer.Optimizer
+
 import scala.language.implicitConversions
 
 object Main {
@@ -59,15 +62,21 @@ object Main {
     val u = param[Int].domain(P)
     val x = variable[Double].domain(P)
 
-    maximize(sum(P)(j => c(j) * x(j))).subjectTo(
+    val model = maximize(sum(P)(j => c(j) * x(j))).subjectTo(
       sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
       forall(P)(j => x(j) <= u(j)),
       forall(P)(j => x(j) >= 0)
     )
 
+    Optimizer[Id](model)(
+      Context().put(P, "A", "B")
+    )
+
+    model
+
   }
 
-  val m4 = {
+  /*val m4 = {
     val S1 = set[String]
     val S2 = set[String]
     val P1 = param[Int].domain(S1, S2)
@@ -79,9 +88,10 @@ object Main {
       ("2", "2") -> 4
     )
     Context().put(P2, 3)
-  }
+  }*/
 
   def main(args: Array[String]): Unit = {
+
     pprint.pprintln(m3)
 
   }
