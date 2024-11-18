@@ -6,8 +6,6 @@ sealed trait Expr
 
 object Expr {
 
-  final case class Ref(index: Int)
-
   sealed trait Declaration extends Expr
 
   object Declaration {

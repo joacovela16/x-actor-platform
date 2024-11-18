@@ -4,8 +4,8 @@ import cats.Monad
 import cats.effect.MonadCancel
 import cats.implicits._
 import xplat.core.api._
-import xplat.lib.optimizer.model.Expr.Logical
-import xplat.lib.optimizer.model.{Context, Model}
+import xplat.lib.optimizer.model.Expr.{Logical, Numerical}
+import xplat.lib.optimizer.model.{Context, Expr, Model}
 
 object Optimizer {
 
@@ -27,7 +27,7 @@ object Optimizer {
   }
 
   private def solver[F[_]: Monad](model: Model, context: Context)(b: Behaviors[F, SolverCommand[F]]): Behavior[F, SolverCommand[F]] = {
-    println(context)
+
     b.message { case SolverCommand.Solve(replyTo) =>
       val c = countConstraint(model, context)
 
@@ -44,6 +44,29 @@ object Optimizer {
         case Logical.Constant(_)       => 1
       }
     }.sum
+  }
+
+  private def countVariables(model: Model, context: Context):Long = {
+    def countVar(expr:Expr.Numerical):Long = {
+      expr match {
+        case Numerical.Binary(left, operator, right) => ???
+        case Numerical.Sum(domain, condition, body) => ???
+        case Numerical.GetParam(references, over) => ???
+        case Numerical.GetVar(references, over) => ???
+        case _ => ???
+      }
+    }
+    model.constraints.map{c =>
+      c.body match {
+        case Logical.Forall(domain, condition, body) => ???
+        case Logical.Relation(left, operator, right) => ???
+        case _ => 0
+      }
+    }
+  }
+
+  private def evaluate(context: Context, expr:Expr.Logical):Boolean={
+    ???
   }
 
 }
