@@ -295,7 +295,7 @@ object IOActorSystem {
         if (children.isEmpty) {
           notifyShutdownDone.as(this.withBehavior(Behavior.Stop()))
         } else {
-          context.log.info(s"Starting shuting down actor ${context.path}") >>
+          context.log.debug(s"Starting shuting down actor ${context.path}") >>
             children.values
               .map(x => x.requestShutdown.as[Option[String]](None).handleError(_ => Option(x.name)))
               .toList
@@ -491,7 +491,7 @@ object IOActorSystem {
         logLib <- Slf4jLogger.fromName[F](actor.path)
         log = IOLogger.build(logLib)
         context = IOContext[F, T](actor, log)
-        _ <- log.info(s"Creating actor ${actor.path}")
+        _ <- log.debug(s"Creating actor ${actor.path}")
         initState <- State
           .Init[F, T](
             behavior = behavior,
@@ -505,7 +505,7 @@ object IOActorSystem {
         _ <- supervisor.supervise(
           channel.stream
             .evalScan[F, State[F, T]](initState)(_ reduce _)
-            .onFinalize(context.log.info(s"Actor ${context.path} is down") >> notifyShutdown)
+            .onFinalize(context.log.debug(s"Actor ${context.path} is down") >> notifyShutdown)
             .compile
             .drain
         )

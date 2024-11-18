@@ -74,7 +74,7 @@ object IOPersistence {
           b.context { ctx =>
             for {
               cancellable <- ctx.schedule(
-                M.pure(ctx.signal(Signal.Kill)) >> ctx.log.info(
+                M.pure(ctx.signal(Signal.Kill)) >> ctx.log.debug(
                   s"Shutting down persistence actor " +
                     s"'${ctx.name}'"
                 ),
@@ -121,7 +121,7 @@ object IOPersistence {
             b
               .stash(0)(stash => daemon(currentState, stash, journal))
               .onSignal { case Signal.PostStop =>
-                journal.close() >> ctx.log.info("2shutting down") >> M.pure(b.same)
+                journal.close() >> ctx.log.debug("2shutting down") >> M.pure(b.same)
               }
           }
         }
