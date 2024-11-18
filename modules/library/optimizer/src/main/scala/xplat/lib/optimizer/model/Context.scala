@@ -3,12 +3,14 @@ package xplat.lib.optimizer.model
 import com.softwaremill.quicklens.ModifyPimp
 import xplat.lib.optimizer.model.Context.Data
 
-final case class Context(store: Context.Store) {
-  private val data = store.data
+final case class Context(
+    data: Map[String, Data],
+    args: Map[Int, Datum]
+) {
   def get(id: String, index: Seq[Int]): Option[Datum] = None
   def get(id: String): Option[Datum] = data.get(id).collect { case Data.Single(data) => data }
   def getNumber(id: String): Option[Double] = get(id).collect { case Datum.DDouble(value) => value }
-  def getStream(id: String): LazyList[Datum] = data.get(id).collect { case Data.Stream(data) => data }.getOrElse(LazyList.empty)
+  def withArg(i: Int, d: Datum): Context = this.modify(_.args).using(xs => xs + (i -> d))
 
   def getSize(id: String): Long = {
     data.get(id) match {
@@ -25,15 +27,35 @@ final case class Context(store: Context.Store) {
     }
   }
 
-  def put[D](s: SSet[D], head: D, tail: D*)(implicit b: Context.DataBuilder.Aux[SSet[D], Seq[D]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
-  def put[T, D](s: Param[T, D], head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
+  def put[D](s: SSet[D], head: D, tail: D*)(implicit b: Context.DataBuilder.Aux[SSet[D], Seq[D]]): Context = this.modify(_.data).using(xs => xs + (s.id -> b.build(head +: tail)))
+  def put[T, D](s: Param[T, D], head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.data).using(xs => xs + (s.id -> b.build(head +: tail)))
 //  def put[T, D](s: Param[T, D])(head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
-  def put[D](s: Param[D, Unit], v: D)(implicit b: Context.DataBuilder.Aux[Param[D, Unit], D]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(v)))
-  def put(id: String, data: Data): Context = this.modify(_.store.data).using(xs => xs + (id -> data))
+  def put[D](s: Param[D, Unit], v: D)(implicit b: Context.DataBuilder.Aux[Param[D, Unit], D]): Context = this.modify(_.data).using(xs => xs + (s.id -> b.build(v)))
+  def put(id: String, data: Data): Context = this.modify(_.data).using(xs => xs + (id -> data))
+
+  def getStream(source: Seq[String]): LazyList[Context] = {
+    val base = source.flatMap { id =>
+      data.get(id).collect { case Data.Stream(data) => data }
+    }.zipWithIndex
+
+    def loop(xs: Seq[(LazyList[Datum], Int)], base: Context): LazyList[Context] = {
+      xs match {
+        case Nil =>
+          LazyList(base)
+        case (head, index) +: tail =>
+          head.flatMap { d =>
+            loop(tail, base.withArg(index, d))
+          }
+      }
+    }
+
+    loop(base, this)
+  }
+
 }
 
 object Context {
-  private val empty = Context(Store(Map.empty))
+  private val empty = Context(Map.empty, Map.empty)
 
   def apply(): Context = {
     empty

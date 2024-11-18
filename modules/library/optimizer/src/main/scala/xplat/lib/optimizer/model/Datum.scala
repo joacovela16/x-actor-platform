@@ -19,8 +19,12 @@ sealed trait Datum {
 }
 
 object Datum {
-  final case class DString(value: String) extends Datum
-  final case class DDouble(value: Double) extends Datum
+  final case class DString(value: String) extends Datum{
+    override def toString: String = value
+  }
+  final case class DDouble(value: Double) extends Datum{
+    override def toString: String = value.toString
+  }
 
   implicit def fromNumber(d: Double): Datum = DDouble(d)
   implicit def fromNumber(d: Int): Datum = DDouble(d)

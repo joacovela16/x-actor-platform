@@ -69,13 +69,20 @@ object Main extends IOApp.Simple {
       forall(P)(j => x(j) >= 0)
     )
 
+    val context = Context()
+      .put(P, "bands", "coils")
+      .put(a, "bands" -> 200, "coils" -> 140)
+      .put(c, "bands" -> 25, "coils" -> 30)
+      .put(u, "bands" -> 6000, "coils" -> 4000)
+      .put(b, 40)
+
+    context
+      .getStream(Seq("P", "P"))
+      .foreach(x => {
+        println(x.args)
+      })
     Optimizer[IO](model)(
-      Context()
-        .put(P, "bands", "coils")
-        .put(a, "bands" -> 200, "coils" -> 140)
-        .put(c, "bands" -> 25, "coils" -> 30)
-        .put(u, "bands" -> 6000, "coils" -> 4000)
-        .put(b, 40)
+      context
     )
 
   }
