@@ -29,7 +29,7 @@ final case class Context(store: Context.Store) {
   def put[T, D](s: Param[T, D], head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
 //  def put[T, D](s: Param[T, D])(head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(head +: tail)))
   def put[D](s: Param[D, Unit], v: D)(implicit b: Context.DataBuilder.Aux[Param[D, Unit], D]): Context = this.modify(_.store.data).using(xs => xs + (s.id -> b.build(v)))
-
+  def put(id: String, data: Data): Context = this.modify(_.store.data).using(xs => xs + (id -> data))
 }
 
 object Context {
@@ -59,6 +59,15 @@ object Context {
 
   object DataBuilder extends DataBuilderLP {
     type Aux[Domain, Apply0] = DataBuilder[Domain] { type Apply = Apply0 }
+
+    implicit def singleParam[T](implicit c: Datum.Codec[T]): DataBuilder.Aux[Param[T, Unit], T] = new DataBuilder[Param[T, Unit]] {
+      override type Apply = T
+
+      override def build(data: T): Data = {
+        Data.Single(c.asDatum(data))
+      }
+
+    }
 
     implicit def mkMatrix2[T, A, B](implicit a: Datum.Codec[A], b: Datum.Codec[B], c: Datum.Codec[T]): DataBuilder.Aux[Param[T, (A, B)], Seq[((A, B), T)]] = new DataBuilder[Param[T, (A, B)]] {
       type Apply = Seq[((A, B), T)]

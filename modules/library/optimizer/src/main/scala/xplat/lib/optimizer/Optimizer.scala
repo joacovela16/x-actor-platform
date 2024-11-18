@@ -27,6 +27,7 @@ object Optimizer {
   }
 
   private def solver[F[_]: Monad](model: Model, context: Context)(b: Behaviors[F, SolverCommand[F]]): Behavior[F, SolverCommand[F]] = {
+    println(context)
     b.message { case SolverCommand.Solve(replyTo) =>
       val c = countConstraint(model, context)
 

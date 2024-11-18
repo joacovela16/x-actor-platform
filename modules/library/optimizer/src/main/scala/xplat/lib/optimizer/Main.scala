@@ -73,6 +73,9 @@ object Main extends IOApp.Simple {
       Context()
         .put(P, "bands", "coils")
         .put(a, "bands" -> 200, "coils" -> 140)
+        .put(c, "bands" -> 25, "coils" -> 30)
+        .put(u, "bands" -> 6000, "coils" -> 4000)
+        .put(b, 40)
     )
 
   }
