@@ -70,7 +70,9 @@ object Main extends IOApp.Simple {
     )
 
     Optimizer[IO](model)(
-      Context().put(P, "A", "B")
+      Context()
+        .put(P, "bands", "coils")
+        .put(a, "bands" -> 200, "coils" -> 140)
     )
 
   }
