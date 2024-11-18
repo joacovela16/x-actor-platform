@@ -1,11 +1,12 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer
 
-import cats.Id
-import xplat.lib.optimizer.Optimizer
+import cats.effect.{IO, IOApp}
+import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
+import xplat.lib.optimizer.model._
 
 import scala.language.implicitConversions
 
-object Main {
+object Main extends IOApp.Simple {
   implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
 //  implicit def mk[T](v: Arg[T]): Expr.Numerical = ???
 
@@ -68,11 +69,9 @@ object Main {
       forall(P)(j => x(j) >= 0)
     )
 
-    Optimizer[Id](model)(
+    Optimizer[IO](model)(
       Context().put(P, "A", "B")
     )
-
-    model
 
   }
 
@@ -90,10 +89,12 @@ object Main {
     Context().put(P2, 3)
   }*/
 
-  def main(args: Array[String]): Unit = {
+  override def run: IO[Unit] = m3
+  /*
+      def main(args: Array[String]): Unit = {
 
-    pprint.pprintln(m3)
+        pprint.pprintln(m3)
 
-  }
+      }*/
 
 }

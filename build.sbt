@@ -18,21 +18,6 @@ val commonsSettings = Seq(
   )
 )
 
-lazy val optLibCore = (project in file("./modules/library/optimizer"))
-  .enablePlugins(spray.boilerplate.BoilerplatePlugin)
-  .settings(
-    name := "optimizer",
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.catsFS2,
-      Dependencies.Compile.cats,
-      Dependencies.Compile.catsEffects,
-      Dependencies.Compile.sourcecode,
-      Dependencies.Compile.catsFree,
-      "org.scalanlp" %% "breeze" % "2.1.0",
-    ),
-    commonsSettings
-  )
-
 lazy val exprLibCore = (project in file("./modules/library/expr/core"))
   .settings(
     name := "expr-lib-core",
@@ -87,6 +72,23 @@ lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/
     name := "xplat-sqlite-persistence",
     libraryDependencies ++= Seq(
       Dependencies.Compile.sqliteDriver
+    ),
+    commonsSettings
+  )
+
+lazy val optLibCore = (project in file("./modules/library/optimizer"))
+  .enablePlugins(spray.boilerplate.BoilerplatePlugin)
+  .aggregate(coreAPI, ioActor)
+  .dependsOn(coreAPI, ioActor)
+  .settings(
+    name := "optimizer",
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.catsFS2,
+      Dependencies.Compile.cats,
+      Dependencies.Compile.catsEffects,
+      Dependencies.Compile.sourcecode,
+      Dependencies.Compile.catsFree,
+      "org.scalanlp" %% "breeze" % "2.1.0"
     ),
     commonsSettings
   )
