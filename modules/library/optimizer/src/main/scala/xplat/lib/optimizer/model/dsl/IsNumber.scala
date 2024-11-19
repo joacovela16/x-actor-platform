@@ -1,4 +1,4 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 sealed trait IsNumber[T] {
   def asDouble(v: T): Double

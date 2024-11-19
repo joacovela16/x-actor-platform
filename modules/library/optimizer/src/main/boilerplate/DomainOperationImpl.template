@@ -1,4 +1,4 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 trait DomainOperationImpl extends DomainOperationImplLP{
 [2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#Arg[A1]#, ]) => Expr.Numerical, ([#Arg[A1]#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{

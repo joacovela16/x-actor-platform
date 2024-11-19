@@ -1,4 +1,4 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 final case class SumBuilder[D](domain: D)
 

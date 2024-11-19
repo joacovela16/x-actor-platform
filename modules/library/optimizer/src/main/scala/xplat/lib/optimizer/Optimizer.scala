@@ -4,8 +4,9 @@ import cats.Monad
 import cats.effect.MonadCancel
 import cats.implicits._
 import xplat.core.api._
-import xplat.lib.optimizer.model.Expr.{Logical, Numerical}
-import xplat.lib.optimizer.model.{Context, Expr, Model}
+import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
+import xplat.lib.optimizer.model.dsl.Expr
+import xplat.lib.optimizer.model.dsl.{Context, _}
 
 object Optimizer {
 
@@ -36,37 +37,93 @@ object Optimizer {
   }
 
   private def countConstraint(model: Model, context: Context): Long = {
-    model.constraints.map { c =>
-      c.body match {
-        case Logical.Forall(domain, _, _) =>
-          domain.foldLeft(1L) { case (acc, item) => acc * context.getSize(item.id) }
-        case Logical.Relation(_, _, _) => 1
-        case Logical.Constant(_)       => 1
-      }
+    model.constraints.map {
+      case Constraint.Forall(domain, condition, _) =>
+        context.getStream(domain.map(_.id)).count(c => evaluateBoolean(c, condition))
+      case _ =>
+        1
     }.sum
   }
 
-  private def countVariables(model: Model, context: Context):Long = {
-    def countVar(expr:Expr.Numerical):Long = {
-      expr match {
-        case Numerical.Binary(left, operator, right) => ???
-        case Numerical.Sum(domain, condition, body) => ???
-        case Numerical.GetParam(references, over) => ???
-        case Numerical.GetVar(references, over) => ???
-        case _ => ???
-      }
-    }
-    model.constraints.map{c =>
-      c.body match {
-        case Logical.Forall(domain, condition, body) => ???
-        case Logical.Relation(left, operator, right) => ???
-        case _ => 0
-      }
+  private def loadVariables(expr:Expr.Numerical, base:Map[String, Int], context: Context):Map[String, Int]={
+    expr match {
+      case Expr.Numerical.Binary(left, operator, right) => ???
+      case Expr.Numerical.Sum(domain, condition, body) =>
+
+        ???
+      case Numerical.GetParam(references, over) => ???
+      case Numerical.GetVar(references, over) => ???
+      case Numerical.Constant(data) => ???
     }
   }
 
-  private def evaluate(context: Context, expr:Expr.Logical):Boolean={
+  private def countVariables(model: Model, context: Context): Long = {
+
+    def countVar(expr: Expr.Numerical): Long = {
+      expr match {
+        case Numerical.Binary(left, operator, right) =>
+          ???
+        case Numerical.Sum(domain, condition, body) =>
+          ???
+        case Numerical.GetParam(references, over) =>
+          ???
+        case Numerical.GetVar(references, over) =>
+          ???
+        case _ =>
+          ???
+      }
+    }
+
+    /*model.constraints.map { c =>
+      c.body match {
+        case Logical.Forall(domain, condition, body) =>
+          ???
+        case Logical.Relation(left, operator, right) =>
+          ???
+        case _ =>
+          0
+      }
+    }*/
+
     ???
+  }
+
+  private def evaluateBoolean(context: Context, expr: Expr.Logical): Boolean = {
+    expr match {
+      case Logical.Relation(left, operator, right) =>
+        val l = evaluateDouble(context, left)
+        val r = evaluateDouble(context, right)
+        operator match {
+          case BinaryRelation.Equals     => l == r
+          case BinaryRelation.Less       => l < r
+          case BinaryRelation.LessEqual  => l <= r
+          case BinaryRelation.Great      => l > r
+          case BinaryRelation.GreatEqual => l >= r
+        }
+      case Logical.Constant(data) =>
+        data
+    }
+  }
+
+  private def evaluateDouble(context: Context, expr: Expr.Numerical): Double = {
+    expr match {
+      case Numerical.Binary(left, operator, right) =>
+        val l = evaluateDouble(context, left)
+        val r = evaluateDouble(context, right)
+        operator match {
+          case BinaryOperator.Plus   => l + r
+          case BinaryOperator.Minus  => l - r
+          case BinaryOperator.Times  => l * r
+          case BinaryOperator.Divide => l / r
+        }
+      case Numerical.Sum(domain, condition, body) =>
+        context.getStream(domain.map(_.id)).filter(c => evaluateBoolean(c, condition)).map(c => evaluateDouble(c, body)).sum
+      case Numerical.GetParam(references, over) => ???
+      case Numerical.GetVar(references, over) =>
+        ???
+      case Numerical.Constant(data) =>
+        data
+    }
   }
 
 }

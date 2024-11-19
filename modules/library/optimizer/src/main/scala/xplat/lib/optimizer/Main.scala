@@ -2,7 +2,7 @@ package xplat.lib.optimizer
 
 import cats.effect.{IO, IOApp}
 import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
-import xplat.lib.optimizer.model._
+import xplat.lib.optimizer.model.dsl._
 
 import scala.language.implicitConversions
 
@@ -76,11 +76,7 @@ object Main extends IOApp.Simple {
       .put(u, "bands" -> 6000, "coils" -> 4000)
       .put(b, 40)
 
-    context
-      .getStream(Seq("P", "P"))
-      .foreach(x => {
-        println(x.args)
-      })
+
     Optimizer[IO](model)(
       context
     )

@@ -1,12 +1,10 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 import scala.language.implicitConversions
 
 sealed trait Datum {
 
-  def asNumber: Option[Double] = this
-  /** EndMarker */
-  match {
+  def asNumber: Option[Double] = this match {
     case Datum.DDouble(value) => Option(value)
     case _                    => None
   }
@@ -19,10 +17,12 @@ sealed trait Datum {
 }
 
 object Datum {
-  final case class DString(value: String) extends Datum{
+
+  final case class DString(value: String) extends Datum {
     override def toString: String = value
   }
-  final case class DDouble(value: Double) extends Datum{
+
+  final case class DDouble(value: Double) extends Datum {
     override def toString: String = value.toString
   }
 

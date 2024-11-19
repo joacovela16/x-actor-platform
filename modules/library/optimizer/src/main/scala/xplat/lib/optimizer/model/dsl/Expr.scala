@@ -1,4 +1,4 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 import scala.language.implicitConversions
 
@@ -6,7 +6,9 @@ sealed trait Expr
 
 object Expr {
 
-  sealed trait Declaration extends Expr
+  sealed trait Declaration extends Expr {
+    def domain: Seq[SetDecl]
+  }
 
   object Declaration {
 
@@ -63,11 +65,28 @@ object Expr {
   sealed trait Logical extends Expr
 
   object Logical {
-    final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Logical
+
     final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Logical
     final case class Constant(data: Boolean) extends Expr.Logical
 
     implicit def mk(v: Boolean): Expr.Logical = Expr.Logical.Constant(v)
+
+  }
+
+  sealed trait Constraint extends Expr {}
+
+  object Constraint {
+    final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Constraint
+    final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Constraint
+    final case class Constant(data: Boolean) extends Expr.Constraint
+
+    implicit def mk(v: Boolean): Expr.Constraint = Constant(v)
+
+    implicit def mk(v: Expr.Logical): Expr.Constraint = v match {
+      case Logical.Relation(left, operator, right) => Constraint.Relation(left, operator, right)
+      case Logical.Constant(data)                  => Constraint.Constant(data)
+    }
+
   }
 
 }

@@ -1,4 +1,4 @@
-package xplat.lib.optimizer.model
+package xplat.lib.optimizer.model.dsl
 
 trait VarGetImpl extends VarGetImplLP{
 [2..#implicit def a1[[#A1#, ]]: VariableGet.Aux[([#A1#, ]), ([#Arg[A1]#, ])] = x => Seq([#x._1.index#, ])

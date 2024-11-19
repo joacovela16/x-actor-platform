@@ -1,6 +1,4 @@
-package xplat.lib.optimizer.model
-
-import xplat.lib.optimizer.model.VarGetImpl
+package xplat.lib.optimizer.model.dsl
 
 trait VariableGet[Domain] {
   type Apply
