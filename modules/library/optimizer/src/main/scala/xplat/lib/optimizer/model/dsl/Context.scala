@@ -4,28 +4,12 @@ import com.softwaremill.quicklens.ModifyPimp
 
 final case class Context(
     data: Map[String, Context.Data],
-    args: Map[Int, Datum],
+    args: Seq[Datum],
     variables: Map[String, Double]
 ) {
   def get(id: String, index: Seq[Int]): Option[Datum] = None
-  def get(id: String): Option[Datum] = data.get(id).collect { case Context.Data.Single(data) => data }
-  def getNumber(id: String): Option[Double] = get(id).collect { case Datum.DDouble(value) => value }
-  def withArg(i: Int, d: Datum): Context = this.modify(_.args).using(xs => xs + (i -> d))
-
-  def getSize(id: String): Long = {
-    data.get(id) match {
-      case Some(d) =>
-        d match {
-          case Context.Data.Single(_)     => 1
-          case Context.Data.Stream(data)  => data.size
-          case Context.Data.Matrix(data)  => data.size
-          case Context.Data.Matrix2(data) => data.size
-          case Context.Data.Matrix3(data) => data.size
-          case Context.Data.Matrix4(data) => data.size
-        }
-      case None => 0L
-    }
-  }
+  def get(id: String): Option[Datum] = data.get(id).collect { case Context.Data.Param1(data) => data }
+  def withArg(d: Datum): Context = this.modify(_.args).using(xs => xs :+ d)
 
   def put[D](s: SSet[D], head: D, tail: D*)(implicit b: Context.DataBuilder.Aux[SSet[D], Seq[D]]): Context = this.modify(_.data).using(xs => xs + (s.id -> b.build(head +: tail)))
   def put[T, D](s: Param[T, D], head: (D, T), tail: (D, T)*)(implicit b: Context.DataBuilder.Aux[Param[T, D], Seq[(D, T)]]): Context = this.modify(_.data).using(xs => xs + (s.id -> b.build(head +: tail)))
@@ -34,7 +18,7 @@ final case class Context(
 
   def getStream(source: Seq[String]): LazyList[Context] = {
     val base = source.flatMap { id =>
-      data.get(id).collect { case Context.Data.Stream(data) => data }
+      data.get(id).collect { case Context.Data.Set(data) => data }
     }.zipWithIndex
 
     def loop(xs: Seq[(LazyList[Datum], Int)], base: Context): LazyList[Context] = {
@@ -43,7 +27,7 @@ final case class Context(
           LazyList(base)
         case (head, index) +: tail =>
           head.flatMap { d =>
-            loop(tail, base.withArg(index, d))
+            loop(tail, base.withArg(d))
           }
       }
     }
@@ -54,7 +38,7 @@ final case class Context(
 }
 
 object Context {
-  private val empty = Context(Map.empty, Map.empty, Map.empty)
+  private val empty = Context(Map.empty, Nil, Map.empty)
 
   def apply(): Context = {
     empty
@@ -63,12 +47,12 @@ object Context {
   sealed trait Data
 
   object Data {
-    final case class Single(data: Datum) extends Data
-    final case class Stream(data: LazyList[Datum]) extends Data
-    final case class Matrix(data: LazyList[(Datum, Datum)]) extends Data
-    final case class Matrix2(data: LazyList[((Datum, Datum), Datum)]) extends Data
-    final case class Matrix3(data: LazyList[((Datum, Datum, Datum), Datum)]) extends Data
-    final case class Matrix4(data: LazyList[((Datum, Datum, Datum, Datum), Datum)]) extends Data
+    final case class Set(data: LazyList[Datum]) extends Data
+    final case class Param1(data: Double) extends Data
+    final case class Param2(data: Map[String, Double]) extends Data
+//    final case class Matrix2(data: LazyList[((Datum, Datum), Datum)]) extends Data
+//    final case class Matrix3(data: LazyList[((Datum, Datum, Datum), Datum)]) extends Data
+//    final case class Matrix4(data: LazyList[((Datum, Datum, Datum, Datum), Datum)]) extends Data
   }
 
   final case class Variable(id: String, reference: Seq[Int])
@@ -81,44 +65,35 @@ object Context {
   object DataBuilder extends DataBuilderLP {
     type Aux[Domain, Apply0] = DataBuilder[Domain] { type Apply = Apply0 }
 
-    implicit def singleParam[T](implicit c: Datum.Codec[T]): DataBuilder.Aux[Param[T, Unit], T] = new DataBuilder[Param[T, Unit]] {
+    implicit def singleParam[T](implicit n: IsNumber[T]): DataBuilder.Aux[Param[T, Unit], T] = new DataBuilder[Param[T, Unit]] {
       override type Apply = T
 
       override def build(data: T): Data = {
-        Data.Single(c.asDatum(data))
+        Data.Param1(n.asDouble(data))
       }
 
     }
 
-    implicit def mkMatrix2[T, A, B](implicit a: Datum.Codec[A], b: Datum.Codec[B], c: Datum.Codec[T]): DataBuilder.Aux[Param[T, (A, B)], Seq[((A, B), T)]] = new DataBuilder[Param[T, (A, B)]] {
+    implicit def mkMatrix2[A, B, T](implicit n: IsNumber[T]): DataBuilder.Aux[Param[T, (A, B)], Seq[((A, B), T)]] = new DataBuilder[Param[T, (A, B)]] {
       type Apply = Seq[((A, B), T)]
 
       override def build(data: Apply): Data = {
-        Data.Matrix2(
-          data.to(LazyList).map(x => ((a.asDatum(x._1._1), b.asDatum(x._1._2)), c.asDatum(x._2)))
+        Data.Param2(
+          data.map(x => s"${x._1._1}${x._1._2}" -> n.asDouble(x._2)).toMap
         )
       }
 
     }
-    /*
-    implicit def mkMatrix2[A, B]: DataBuilder.Aux[(SSet[A], SSet[B]), ((Datum, Datum), Datum)] = new DataBuilder[(SSet[A], SSet[B]), ((Datum, Datum), Datum)] {
-      type Apply = ((Datum, Datum), Datum)
-
-      override def build(data: Seq[Apply]): Data = {
-        Data.Matrix2(data.to(LazyList))
-      }
-
-    }*/
 
   }
 
   trait DataBuilderLP {
 
-    implicit def mkVector4Param[D, T](implicit c: Datum.Codec[T], d: Datum.Codec[D]): DataBuilder.Aux[Param[T, D], Seq[(D, T)]] = new DataBuilder[Param[T, D]] {
+    implicit def mkVector4Param[D, T](implicit n: IsNumber[T]): DataBuilder.Aux[Param[T, D], Seq[(D, T)]] = new DataBuilder[Param[T, D]] {
       type Apply = Seq[(D, T)]
 
       override def build(data: Apply): Data = {
-        Data.Matrix(data.to(LazyList).map(x => d.asDatum(x._1) -> c.asDatum(x._2)))
+        Data.Param2(data.map(x => x._1.toString -> n.asDouble(x._2)).toMap)
       }
 
     }
@@ -127,7 +102,7 @@ object Context {
       type Apply = Seq[D]
 
       override def build(data: Apply): Data = {
-        Data.Stream(data.to(LazyList).map(c.asDatum))
+        Data.Set(data.to(LazyList).map(c.asDatum))
       }
 
     }

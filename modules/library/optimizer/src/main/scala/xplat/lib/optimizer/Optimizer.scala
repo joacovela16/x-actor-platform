@@ -14,7 +14,7 @@ object Optimizer {
   }
 
   private def solver[F[_]: Monad](model: Model, context: Context): Long = {
-
+    println(context)
     val c = countConstraint(model, context)
     c
   }
