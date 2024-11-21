@@ -7,10 +7,15 @@ object SubjectTo {
   implicit class Predef[D, T, Apply, Cond](
       subjectTo: SubjectTo[D]
   )(implicit ops: DomainOperation.Aux[D, T, Apply, Cond]) {
-    def apply(x: Cond): Expr.Constraint = Expr.Constraint.Forall(ops.asReference(subjectTo.domain), true, ops.conditional(x))
+
+    def apply(x: Cond): Expr.Constraint = {
+      val ref = ops.asReference(subjectTo.domain)
+      Expr.Constraint.Forall(ops.asReference(subjectTo.domain), true, ops.conditional(x)(ref))
+    }
 
     def where(x: Cond)(y: Cond): Expr.Constraint = {
-      Expr.Constraint.Forall(ops.asReference(subjectTo.domain), ops.conditional(x), ops.conditional(y))
+      val ref = ops.asReference(subjectTo.domain)
+      Expr.Constraint.Forall(ops.asReference(subjectTo.domain), ops.conditional(x)(ref), ops.conditional(y)(ref))
     }
 
   }

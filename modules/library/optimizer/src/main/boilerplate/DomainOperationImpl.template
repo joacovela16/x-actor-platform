@@ -6,8 +6,8 @@ trait DomainOperationImpl extends DomainOperationImplLP{
     type Apply = ([#Arg[A1]#, ]) => Expr.Numerical
     type Conditional = ([#Arg[A1]#, ]) => Expr.Logical
     override def asReference(d: ([#SSet[A1]#, ])): Seq[SetDecl] = Seq([#d._1.asDecl#])
-    override def apply(a:Apply): Expr.Numerical = a([#Arg(0)#, ])
-    override def conditional(a: Conditional): Expr.Logical = a([#Arg(0)#, ])
+    override def apply(a:Apply): Seq[SetDecl] => Expr.Numerical = d => a([#Arg(0, d(0).id)#, ])
+    override def conditional(a: Conditional): Seq[SetDecl] => Expr.Logical = d => a([#Arg(0, d(0).id)#, ])
     override def asStream(d: ([#SSet[A1]#, ]), c:Context): LazyList[Context] = {
         ???
     }
@@ -22,8 +22,8 @@ trait DomainOperationImplLP{
         type Apply = Arg[A1] => Expr.Numerical
         type Conditional = Arg[A1] => Expr.Logical
         override def asReference(d: SSet[A1]): Seq[SetDecl] = Seq(d.asDecl)
-        override def apply(a:Apply): Expr.Numerical = a(Arg(0))
-        override def conditional(a: Conditional): Expr.Logical = a(Arg(0))
+        override def apply(a:Apply): Seq[SetDecl] => Expr.Numerical = d => a(Arg(0, d(0).id))
+        override def conditional(a: Conditional): Seq[SetDecl] => Expr.Logical = d => a(Arg(0, d(0).id))
         override def asStream(d: SSet[A1], c: Context): LazyList[Context] = {
             ???
         }

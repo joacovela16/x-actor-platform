@@ -7,6 +7,7 @@ sealed trait Expr
 object Expr {
 
   sealed trait Declaration extends Expr {
+    def id: String
     def domain: Seq[SetDecl]
   }
 
@@ -46,15 +47,21 @@ object Expr {
     def >=(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.GreatEqual, other)
     def >(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Great, other)
     def <(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Less, other)
+    def isStatic: Boolean = false
   }
 
   object Numerical {
     final case class Binary(left: Numerical, operator: BinaryOperator, right: Numerical) extends Expr.Numerical
     final case class Sum(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
+    final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical
 
-    final case class GetParam(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
-    final case class GetVar(references: Seq[Int], over: Expr.Declaration) extends Expr.Numerical
-    final case class Constant(data: Double) extends Expr.Numerical
+    final case class GetParam(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
+      override def isStatic: Boolean = true
+    }
+
+    final case class Constant(data: Double) extends Expr.Numerical {
+      override def isStatic: Boolean = true
+    }
 
     implicit def mk(d: Double): Expr.Numerical = Expr.Numerical.Constant(d)
     implicit def mk(d: Int): Expr.Numerical = Expr.Numerical.Constant(d)

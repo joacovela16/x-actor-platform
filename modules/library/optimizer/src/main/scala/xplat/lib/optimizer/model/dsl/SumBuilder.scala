@@ -12,7 +12,7 @@ object SumBuilder {
 
     def apply(a: Apply): Expr.Numerical = {
       val ref = ops.asReference(data.domain)
-      Expr.Numerical.Sum(ref, true, ops(a))
+      Expr.Numerical.Sum(ref, true, ops(a)(ref))
     }
 
   }
@@ -20,7 +20,8 @@ object SumBuilder {
   final case class Dummy[D, Tuple, Apply, Conditional](data: D, cond: Conditional, ops: DomainOperation.Aux[D, Tuple, Apply, Conditional]) {
 
     def apply(a: Apply): Expr.Numerical = {
-      Expr.Numerical.Sum(ops.asReference(data), ops.conditional(cond), ops(a))
+      val ref = ops.asReference(data)
+      Expr.Numerical.Sum(ops.asReference(data), ops.conditional(cond)(ref), ops(a)(ref))
     }
 
   }

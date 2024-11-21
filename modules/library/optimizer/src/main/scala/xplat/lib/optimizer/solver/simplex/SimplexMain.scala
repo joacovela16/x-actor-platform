@@ -2,9 +2,11 @@ package xplat.lib.optimizer.solver.simplex
 
 import cats.Monad
 import cats.data.State
+import com.softwaremill.quicklens.ModifyPimp
 import xplat.lib.optimizer.model.core.{Solver, Stage}
 import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
-import xplat.lib.optimizer.model.dsl.{BinaryRelation, Expr}
+import xplat.lib.optimizer.model.dsl.{BinaryRelation, Context, Expr, Model}
+import xplat.lib.optimizer.solver.Shared
 
 final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
 
@@ -68,6 +70,82 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
     }
 
     ???
+  }
+
+}
+
+object SimplexMain {
+  final case class Variable(id: String, factor: Double, clearance: Boolean)
+  final case class Entry(variables: List[Variable], independentTerm: Double)
+
+  final case class Registry(
+      clearance: Int,
+      entries: List[Entry]
+  ) {
+    def withEntry(v: Entry): Registry = this.modify(_.entries).using(v +: _)
+  }
+
+  private def prepare(model: Model, context: Context): Registry = {
+
+    def isStatic(expr: Expr.Numerical): Boolean = {
+      expr match {
+        case Expr.Numerical.Binary(left, operator, right) =>
+          isStatic(left) && isStatic(right)
+        case Expr.Numerical.Sum(domain, condition, body) =>
+          isStatic(body)
+        case Expr.Numerical.GetParam(references, over) =>
+          true
+        case Expr.Numerical.GetVar(references, over) =>
+          false
+        case Expr.Numerical.Constant(_) => true
+      }
+    }
+
+    def analyzeNumerical(
+        context: Context,
+        expr: Expr.Numerical,
+        entry: Entry,
+        onLeftSide: Boolean
+    ): Entry = {
+      if (expr.isStatic) {
+        Shared.evalDouble(context, expr)
+      }
+
+      expr match {
+        case Expr.Numerical.Binary(left, operator, right) => ???
+        case Expr.Numerical.Sum(domain, condition, body)  => ???
+        case Expr.Numerical.GetParam(references, over)    => ???
+        case Expr.Numerical.GetVar(references, over)      => ???
+        case _                                            => ???
+      }
+
+      entry
+    }
+
+    val base = Registry(clearance = 0, entries = Nil)
+
+    model.constraints.foldLeft(base) { case (acc, item) =>
+      item match {
+        case datum: Expr.Constraint.Forall =>
+          Shared.evalForAll(context, datum).foldLeft(acc) { case (acc2, c) =>
+            datum.body match {
+              case datum: Expr.Logical.Relation =>
+                val e1 = analyzeNumerical(context = c, expr = datum.left, entry = Entry(Nil, 0), onLeftSide = true)
+                val e2 = analyzeNumerical(context = c, expr = datum.right, entry = e1, onLeftSide = false)
+                acc2.withEntry(e2)
+              case _ =>
+                acc2
+            }
+          }
+        case datum: Expr.Constraint.Relation =>
+          val e1 = analyzeNumerical(context = context, expr = datum.left, entry = Entry(Nil, 0), onLeftSide = true)
+          val e2 = analyzeNumerical(context = context, expr = datum.right, entry = e1, onLeftSide = false)
+
+          acc.withEntry(e2)
+        case _ =>
+          acc
+      }
+    }
   }
 
 }

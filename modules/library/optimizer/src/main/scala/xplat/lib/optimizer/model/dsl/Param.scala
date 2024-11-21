@@ -30,7 +30,7 @@ object Param {
   ) {
 
     def project(a: Apply): Param[T, Tuple] = {
-      Param(param.id, param.kind, param.domain, Option(ops(a)))
+      Param(param.id, param.kind, param.domain, Option(ops(a)(param.domain)))
     }
 
   }
