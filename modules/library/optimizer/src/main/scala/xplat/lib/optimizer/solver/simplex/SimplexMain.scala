@@ -76,7 +76,10 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
 
 object SimplexMain {
   final case class Variable(id: String, factor: Double, clearance: Boolean)
-  final case class Entry(variables: List[Variable], independentTerm: Double)
+
+  final case class Entry(variables: List[Variable], independentTerm: Double) {
+    def mapTerm(f: Double => Double): Entry = this.modify(_.independentTerm).using(f)
+  }
 
   final case class Registry(
       clearance: Int,
@@ -105,18 +108,41 @@ object SimplexMain {
         context: Context,
         expr: Expr.Numerical,
         entry: Entry,
-        onLeftSide: Boolean
+        sideSign: Double
     ): Entry = {
       if (expr.isStatic) {
         Shared.evalDouble(context, expr)
       }
 
       expr match {
-        case Expr.Numerical.Binary(left, operator, right) => ???
-        case Expr.Numerical.Sum(domain, condition, body)  => ???
-        case Expr.Numerical.GetParam(references, over)    => ???
-        case Expr.Numerical.GetVar(references, over)      => ???
-        case _                                            => ???
+        case Expr.Numerical.Binary(left, operator, right) =>
+          val e = {
+            if (left.isStatic && right.isStatic){
+              val r = Shared.evalDouble(context, expr)
+              entry.mapTerm(x => x + r * sideSign)
+            }else{
+
+            }
+            ???
+          }
+
+          val e1 = {
+            if (left.isStatic) {
+              val r1 = Shared.evalDouble(context, left)
+              entry.mapTerm(x => x + sideSign * r1)
+            } else {
+              entry
+            }
+          }
+
+          val e2 = {
+            ???
+          }
+          ???
+        case Expr.Numerical.Sum(domain, condition, body) => ???
+        case Expr.Numerical.GetParam(references, over)   => ???
+        case Expr.Numerical.GetVar(references, over)     => ???
+        case _                                           => ???
       }
 
       entry
@@ -130,16 +156,16 @@ object SimplexMain {
           Shared.evalForAll(context, datum).foldLeft(acc) { case (acc2, c) =>
             datum.body match {
               case datum: Expr.Logical.Relation =>
-                val e1 = analyzeNumerical(context = c, expr = datum.left, entry = Entry(Nil, 0), onLeftSide = true)
-                val e2 = analyzeNumerical(context = c, expr = datum.right, entry = e1, onLeftSide = false)
+                val e1 = analyzeNumerical(context = c, expr = datum.left, entry = Entry(Nil, 0), sideSign = -1)
+                val e2 = analyzeNumerical(context = c, expr = datum.right, entry = e1, sideSign = 1)
                 acc2.withEntry(e2)
               case _ =>
                 acc2
             }
           }
         case datum: Expr.Constraint.Relation =>
-          val e1 = analyzeNumerical(context = context, expr = datum.left, entry = Entry(Nil, 0), onLeftSide = true)
-          val e2 = analyzeNumerical(context = context, expr = datum.right, entry = e1, onLeftSide = false)
+          val e1 = analyzeNumerical(context = context, expr = datum.left, entry = Entry(Nil, 0), sideSign = -1)
+          val e2 = analyzeNumerical(context = context, expr = datum.right, entry = e1, sideSign = 1)
 
           acc.withEntry(e2)
         case _ =>
