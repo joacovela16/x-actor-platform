@@ -48,12 +48,16 @@ object Expr {
     def >(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Great, other)
     def <(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Less, other)
     def isStatic: Boolean = false
+    def isVariable: Boolean = false
   }
 
   object Numerical {
     final case class Binary(left: Numerical, operator: BinaryOperator, right: Numerical) extends Expr.Numerical
     final case class Sum(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
-    final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical
+
+    final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
+      override def isVariable: Boolean = true
+    }
 
     final case class GetParam(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
       override def isStatic: Boolean = true
@@ -84,15 +88,11 @@ object Expr {
 
   object Constraint {
     final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Constraint
-    final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Constraint
-    final case class Constant(data: Boolean) extends Expr.Constraint
+    final case class Relation(body: Expr.Logical) extends Expr.Constraint
 
-    implicit def mk(v: Boolean): Expr.Constraint = Constant(v)
+    implicit def mk(v: Boolean): Expr.Constraint = Constraint.Relation(v)
 
-    implicit def mk(v: Expr.Logical): Expr.Constraint = v match {
-      case Logical.Relation(left, operator, right) => Constraint.Relation(left, operator, right)
-      case Logical.Constant(data)                  => Constraint.Constant(data)
-    }
+    implicit def mk(v: Expr.Logical): Expr.Constraint = Constraint.Relation(v)
 
   }
 

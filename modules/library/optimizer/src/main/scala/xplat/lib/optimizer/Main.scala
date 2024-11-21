@@ -1,7 +1,6 @@
 package xplat.lib.optimizer
 
 import cats.effect.{IO, IOApp}
-import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
 import xplat.lib.optimizer.model.dsl._
 
 import scala.language.implicitConversions
@@ -62,6 +61,7 @@ object Main extends IOApp.Simple {
     val c = param[Int].domain(P)
     val u = param[Int].domain(P)
     val x = variable[Double].domain(P)
+    val y = variable[Double]
 
     val model = maximize(sum(P)(j => c(j) * x(j))).subjectTo(
       sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
@@ -75,7 +75,6 @@ object Main extends IOApp.Simple {
       .put(c, "bands" -> 25, "coils" -> 30)
       .put(u, "bands" -> 6000, "coils" -> 4000)
       .put(b, 40)
-
 
     Optimizer[IO](model)(
       context

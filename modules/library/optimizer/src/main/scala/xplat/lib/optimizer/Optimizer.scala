@@ -3,6 +3,7 @@ package xplat.lib.optimizer
 import cats.Monad
 import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
 import xplat.lib.optimizer.model.dsl._
+import xplat.lib.optimizer.solver.Shared
 
 object Optimizer {
 
@@ -16,6 +17,9 @@ object Optimizer {
   private def solver[F[_]: Monad](model: Model, context: Context): Long = {
     println(context)
     val c = countConstraint(model, context)
+    println(
+      model.constraints.flatMap(c => Shared.extractMetadata(c))
+    )
     c
   }
 

@@ -66,7 +66,7 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
       case Constraint.Forall(domain, condition, body) =>
         context.getStream(domain.map(_.id))
         ???
-      case Constraint.Relation(left, operator, right) => ???
+      case Constraint.Relation(body) => ???
     }
 
     ???
@@ -117,12 +117,10 @@ object SimplexMain {
       expr match {
         case Expr.Numerical.Binary(left, operator, right) =>
           val e = {
-            if (left.isStatic && right.isStatic){
+            if (left.isStatic && right.isStatic) {
               val r = Shared.evalDouble(context, expr)
               entry.mapTerm(x => x + r * sideSign)
-            }else{
-
-            }
+            } else {}
             ???
           }
 
@@ -164,10 +162,10 @@ object SimplexMain {
             }
           }
         case datum: Expr.Constraint.Relation =>
-          val e1 = analyzeNumerical(context = context, expr = datum.left, entry = Entry(Nil, 0), sideSign = -1)
-          val e2 = analyzeNumerical(context = context, expr = datum.right, entry = e1, sideSign = 1)
-
-          acc.withEntry(e2)
+//          val e1 = analyzeNumerical(context = context, expr = datum.left, entry = Entry(Nil, 0), sideSign = -1)
+//          val e2 = analyzeNumerical(context = context, expr = datum.right, entry = e1, sideSign = 1)
+//          acc.withEntry(e2)
+          ???
         case _ =>
           acc
       }
