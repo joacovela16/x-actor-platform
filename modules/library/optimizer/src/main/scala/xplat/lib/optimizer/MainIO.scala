@@ -110,6 +110,11 @@ object MainIO extends IOApp.Simple {
       Shared.simplify(x2 + x1 + x3 + x4) == (((x1 + x2) + x3) + x4)
     )
 
+    pprint.pprintln(
+      Shared.simplify(x1 + (2*x2) + x1 )
+    )
+
+
     Optimizer[IO](model)(
       context
     )

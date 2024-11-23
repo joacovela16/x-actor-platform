@@ -271,6 +271,11 @@ object Shared {
           (f2 * a) + (f1 * b)
         }
       // x3 + x2 + x1 => x1 + x2 + x3
+      // 2*x3 + x2 + x1 => x1 + x2 + 2*x3
+      case IsAdditionFactor(f1, IsAdditionFactor(f2, IsVar(v1), f3, IsVar(v2)), f4, IsVar(v3)) if v3.id < v1.id && v3.id < v2.id =>
+        simplify(
+          (f4 * v3) + f1 * ((f2 * v1) + (f3 * v2))
+        )
       case IsBinary(IsBinary(IsVarFactor(f1, v1), IsAddition(op1), IsVarFactor(f2, v2)), IsAddition(op2), IsVarFactor(f3, v3)) if v3.id < v1.id && v3.id < v2.id =>
         simplify(
           Expr.Numerical.Binary(
