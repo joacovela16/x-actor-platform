@@ -6,34 +6,7 @@ import xplat.lib.optimizer.solver.Shared
 
 import scala.language.implicitConversions
 
-object MainIO extends IOApp.Simple {
-
-  implicit class DoublePredef(n: Int) {
-    def *[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Times, v)
-  }
-
-  implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
-//  implicit def mk[T](v: Arg[T]): Expr.Numerical = ???
-
-  def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
-
-  def set[T](implicit sc: sourcecode.Name, v: Typed[T, DomainType]): SSet[T] = SSet.Open(sc.value)
-  def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name, c: Datum.Codec[T]): SSet[T] = SSet.Literal(sc.value, head +: tail, c)
-  def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
-
-  def param[T](implicit k: Typed[T, NumberType], sc: sourcecode.Name): Param[T, Unit] = Param(sc.value, k.value)
-  def variable[T](implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = variable()
-
-  def variable[T](lowerBound: Option[T] = None, upperBound: Option[T] = None)(implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = {
-    Var(sc.value, t.value, lowerBound.map(k.asDouble), upperBound.map(k.asDouble))
-  }
-
-  def sum[D](value: D): SumBuilder[D] = SumBuilder(value)
-
-  def minimize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Min, expr, Nil)
-  def maximize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Max, expr, Nil)
-
-  def forall[D](value: D): SubjectTo[D] = SubjectTo(value)
+object MainIO extends IOApp.Simple with OptimizerDSL {
 
   val m1 = {
 //    val s1 = set[Int]
@@ -86,7 +59,7 @@ object MainIO extends IOApp.Simple {
     val x3 = variable[Int]
     val x4 = variable[Int]
 
-    pprint.pprintln(
+  /*  pprint.pprintln(
       Shared.simplify(x1 + x2 + x2) == x1 + (2 * x2)
     )
 
@@ -109,7 +82,7 @@ object MainIO extends IOApp.Simple {
     pprint.pprintln(
       Shared.simplify(x2 + x1 + x3 + x4) == (((x1 + x2) + x3) + x4)
     )
-
+*/
     pprint.pprintln(
       Shared.simplify(x1 + (2*x2) + x1 )
     )
