@@ -8,17 +8,16 @@ import xplat.lib.optimizer.solver.Shared
 object Optimizer {
 
   def apply[F[_]](model: Model)(c: Context)(implicit M: Monad[F]): F[Unit] = {
-    println(
-      solver(model, c)
-    )
+
     M.unit
   }
 
   private def solver[F[_]: Monad](model: Model, context: Context): Long = {
-    println(context)
     val c = countConstraint(model, context)
-    println(
-      model.constraints.flatMap(c => Shared.extractMetadata(c))
+    pprint.pprintln(
+      model.constraints.map { c =>
+        Shared.simplify(c)
+      }
     )
     c
   }
@@ -35,7 +34,7 @@ object Optimizer {
   private def loadVariables(expr: Expr.Numerical, base: Map[String, Int], context: Context): Map[String, Int] = {
     expr match {
       case Expr.Numerical.Binary(left, operator, right) => ???
-      case Expr.Numerical.Sum(domain, condition, body) =>
+      case Expr.Numerical.Summatory(domain, condition, body) =>
         ???
       case Numerical.GetParam(references, over) => ???
       case Numerical.GetVar(references, over)   => ???
@@ -49,7 +48,7 @@ object Optimizer {
       expr match {
         case Numerical.Binary(left, operator, right) =>
           ???
-        case Numerical.Sum(domain, condition, body) =>
+        case Numerical.Summatory(domain, condition, body) =>
           ???
         case Numerical.GetParam(references, over) =>
           ???
@@ -80,11 +79,11 @@ object Optimizer {
         val l = evaluateDouble(context, left)
         val r = evaluateDouble(context, right)
         operator match {
-          case BinaryRelation.Equals     => l == r
-          case BinaryRelation.Less       => l < r
-          case BinaryRelation.LessEqual  => l <= r
-          case BinaryRelation.Great      => l > r
-          case BinaryRelation.GreatEqual => l >= r
+          case Relations.Equals     => l == r
+          case Relations.Less       => l < r
+          case Relations.LessEqual  => l <= r
+          case Relations.Great      => l > r
+          case Relations.GreatEqual => l >= r
         }
       case Logical.Constant(data) =>
         data
@@ -97,12 +96,12 @@ object Optimizer {
         val l = evaluateDouble(context, left)
         val r = evaluateDouble(context, right)
         operator match {
-          case BinaryOperator.Plus   => l + r
-          case BinaryOperator.Minus  => l - r
-          case BinaryOperator.Times  => l * r
-          case BinaryOperator.Divide => l / r
+          case Arithmentics.Plus   => l + r
+          case Arithmentics.Minus  => l - r
+          case Arithmentics.Times  => l * r
+          case Arithmentics.Divide => l / r
         }
-      case Numerical.Sum(domain, condition, body) =>
+      case Numerical.Summatory(domain, condition, body) =>
         context.getStream(domain.map(_.id)).filter(c => evaluateBoolean(c, condition)).map(c => evaluateDouble(c, body)).sum
       case Numerical.GetParam(references, over) => ???
       case Numerical.GetVar(references, over) =>

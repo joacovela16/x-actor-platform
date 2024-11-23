@@ -38,24 +38,27 @@ object Expr {
   }
 
   sealed trait Numerical extends Expr {
-    def +(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Plus, other)
-    def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Times, other)
-    def *(other: Double): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Times, other)
-    def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Minus, other)
-    def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, BinaryOperator.Divide, other)
-    def <=(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.LessEqual, other)
-    def >=(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.GreatEqual, other)
-    def >(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Great, other)
-    def <(other: Numerical): Logical = Expr.Logical.Relation(this, BinaryRelation.Less, other)
+    def +(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Plus, other)
+    def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Times, other)
+    def *(other: Double): Numerical = Expr.Numerical.Binary(this, Arithmentics.Times, other)
+    def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Minus, other)
+    def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Divide, other)
+    def <=(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.LessEqual, other)
+    def >=(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.GreatEqual, other)
+    def ===(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Equals, other)
+    def >(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Great, other)
+    def <(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Less, other)
     def isStatic: Boolean = false
     def isVariable: Boolean = false
   }
 
   object Numerical {
-    final case class Binary(left: Numerical, operator: BinaryOperator, right: Numerical) extends Expr.Numerical
-    final case class Sum(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
+    def apply(n:Numerical):Numerical = n
+    final case class Binary(left: Numerical, operator: Arithmentics, right: Numerical) extends Expr.Numerical
+    final case class Summatory(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
 
     final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
+      def id: String = over.id
       override def isVariable: Boolean = true
     }
 
@@ -77,14 +80,14 @@ object Expr {
 
   object Logical {
 
-    final case class Relation(left: Numerical, operator: BinaryRelation, right: Numerical) extends Expr.Logical
+    final case class Relation(left: Numerical, operator: Relations, right: Numerical) extends Expr.Logical
     final case class Constant(data: Boolean) extends Expr.Logical
 
     implicit def mk(v: Boolean): Expr.Logical = Expr.Logical.Constant(v)
 
   }
 
-  sealed trait Constraint extends Expr {}
+  sealed trait Constraint extends Expr
 
   object Constraint {
     final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Constraint

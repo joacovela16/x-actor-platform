@@ -5,7 +5,7 @@ import cats.data.State
 import com.softwaremill.quicklens.ModifyPimp
 import xplat.lib.optimizer.model.core.{Solver, Stage}
 import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
-import xplat.lib.optimizer.model.dsl.{BinaryRelation, Context, Expr, Model}
+import xplat.lib.optimizer.model.dsl.{Relations, Context, Expr, Model}
 import xplat.lib.optimizer.solver.Shared
 
 final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
@@ -37,7 +37,7 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
 
     def evalNumerical(expr: Expr.Numerical): Double = expr match {
       case Numerical.Binary(left, operator, right) => ???
-      case Numerical.Sum(domain, condition, body)  => ???
+      case Numerical.Summatory(domain, condition, body)  => ???
       case Numerical.GetParam(references, over)    => ???
       case Numerical.GetVar(references, over)      => ???
       case Numerical.Constant(data) =>
@@ -51,11 +51,11 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
           val r = evalNumerical(right)
 
           operator match {
-            case BinaryRelation.Equals     => l == r
-            case BinaryRelation.Less       => l < r
-            case BinaryRelation.LessEqual  => l <= r
-            case BinaryRelation.Great      => l > r
-            case BinaryRelation.GreatEqual => l >= r
+            case Relations.Equals     => l == r
+            case Relations.Less       => l < r
+            case Relations.LessEqual  => l <= r
+            case Relations.Great      => l > r
+            case Relations.GreatEqual => l >= r
           }
         case Logical.Constant(data) =>
           data
@@ -94,7 +94,7 @@ object SimplexMain {
       expr match {
         case Expr.Numerical.Binary(left, operator, right) =>
           isStatic(left) && isStatic(right)
-        case Expr.Numerical.Sum(domain, condition, body) =>
+        case Expr.Numerical.Summatory(domain, condition, body) =>
           isStatic(body)
         case Expr.Numerical.GetParam(references, over) =>
           true
@@ -137,7 +137,7 @@ object SimplexMain {
             ???
           }
           ???
-        case Expr.Numerical.Sum(domain, condition, body) => ???
+        case Expr.Numerical.Summatory(domain, condition, body) => ???
         case Expr.Numerical.GetParam(references, over)   => ???
         case Expr.Numerical.GetVar(references, over)     => ???
         case _                                           => ???

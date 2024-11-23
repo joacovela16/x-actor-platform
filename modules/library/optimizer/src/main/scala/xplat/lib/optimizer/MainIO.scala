@@ -2,10 +2,16 @@ package xplat.lib.optimizer
 
 import cats.effect.{IO, IOApp}
 import xplat.lib.optimizer.model.dsl._
+import xplat.lib.optimizer.solver.Shared
 
 import scala.language.implicitConversions
 
-object Main extends IOApp.Simple {
+object MainIO extends IOApp.Simple {
+
+  implicit class DoublePredef(n: Int) {
+    def *[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Times, v)
+  }
+
   implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
 //  implicit def mk[T](v: Arg[T]): Expr.Numerical = ???
 
@@ -61,7 +67,6 @@ object Main extends IOApp.Simple {
     val c = param[Int].domain(P)
     val u = param[Int].domain(P)
     val x = variable[Double].domain(P)
-    val y = variable[Double]
 
     val model = maximize(sum(P)(j => c(j) * x(j))).subjectTo(
       sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
@@ -75,6 +80,35 @@ object Main extends IOApp.Simple {
       .put(c, "bands" -> 25, "coils" -> 30)
       .put(u, "bands" -> 6000, "coils" -> 4000)
       .put(b, 40)
+
+    val x1 = variable[Int]
+    val x2 = variable[Int]
+    val x3 = variable[Int]
+    val x4 = variable[Int]
+
+    pprint.pprintln(
+      Shared.simplify(x1 + x2 + x2) == x1 + (2 * x2)
+    )
+
+    pprint.pprintln(
+      Shared.simplify(x1 + (2 * (x2 + x3))) == x1 + (2 * x2 + 2 * x3)
+    )
+
+    pprint.pprintln(
+      Shared.simplify(x3 + x2 + x1) == x1 + (x2 + x3)
+    )
+
+    pprint.pprintln(
+      Shared.simplify(x2 + x3 + x1) == x1 + (x2 + x3)
+    )
+
+    pprint.pprintln(
+      Shared.simplify(2 * x1 - x1) == Expr.Numerical(x1)
+    )
+
+    pprint.pprintln(
+      Shared.simplify(x2 + x1 + x3 + x4) == (((x1 + x2) + x3) + x4)
+    )
 
     Optimizer[IO](model)(
       context
