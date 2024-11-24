@@ -2,7 +2,7 @@ package xplat.lib.optimizer
 
 import cats.effect.{IO, IOApp}
 import xplat.lib.optimizer.model.dsl._
-import xplat.lib.optimizer.solver.Shared
+import xplat.lib.optimizer.solver.{Shared, Simplifier}
 
 import scala.language.implicitConversions
 
@@ -84,7 +84,7 @@ object MainIO extends IOApp.Simple with OptimizerDSL {
     )
 */
     pprint.pprintln(
-      Shared.simplify(x1 + (2*x2) + x1 )
+      Simplifier.simplify(x1 + (2*x2) + x1 )
     )
 
 

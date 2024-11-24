@@ -10,8 +10,10 @@ case object WithConstantFactor {
         Option(c -> e)
       case IsBinary(e, Arithmentics.Times, IsLiteral(c)) =>
         Option(c -> e)
-      case IsVar(e) =>
-        Option(1.0 -> Expr.Numerical(e))
+      case IsVarFactor(f, e) =>
+        Option(f -> e)
+      case IsParamFactor(f, e) =>
+        Option(f -> e)
       case IsParam(e) =>
         Option(1.0 -> Expr.Numerical(e))
 

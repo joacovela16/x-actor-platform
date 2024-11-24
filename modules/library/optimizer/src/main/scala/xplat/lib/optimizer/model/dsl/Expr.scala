@@ -40,7 +40,6 @@ object Expr {
   sealed trait Numerical extends Expr {
     def +(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Plus, other)
     def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Times, other)
-    def *(other: Double): Numerical = Expr.Numerical.Binary(this, Arithmentics.Times, other)
     def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Minus, other)
     def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Divide, other)
     def <=(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.LessEqual, other)

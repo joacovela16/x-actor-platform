@@ -3,7 +3,7 @@ package xplat.lib.optimizer
 import cats.Monad
 import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
 import xplat.lib.optimizer.model.dsl._
-import xplat.lib.optimizer.solver.Shared
+import xplat.lib.optimizer.solver.{Shared, Simplifier}
 
 object Optimizer {
 
@@ -16,7 +16,7 @@ object Optimizer {
     val c = countConstraint(model, context)
     pprint.pprintln(
       model.constraints.map { c =>
-        Shared.simplify(c)
+        Simplifier.simplify(c)
       }
     )
     c
