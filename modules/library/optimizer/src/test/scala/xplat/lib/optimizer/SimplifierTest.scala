@@ -79,4 +79,8 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
     assert(Simplifier(p1 * (x1 + x2 + x3)) == p1 * x1 + p1 * x2 + p1 * x3)
   }
 
+  test("17") {
+    assert(Simplifier(p1/2 * (x1 + x2 + x3)) == p1/2 * x1 + p1/2 * x2 + p1/2 * x3)
+  }
+
 }
