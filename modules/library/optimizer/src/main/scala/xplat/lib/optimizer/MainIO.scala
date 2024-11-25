@@ -84,7 +84,7 @@ object MainIO extends IOApp.Simple with OptimizerDSL {
     )
 */
     pprint.pprintln(
-      Simplifier.simplify(x1 + (2*x2) + x1 )
+      Simplifier(x1 + (2*x2) + x1 )
     )
 
 

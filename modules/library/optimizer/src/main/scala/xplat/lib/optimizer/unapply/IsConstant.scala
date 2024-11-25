@@ -10,7 +10,7 @@ case object IsConstant {
         Option(expr)
       case Expr.Numerical.Constant(_) =>
         Option(expr)
-      case IsBinary(IsConstant(a), IsFactor(op), IsConstant(b)) =>
+      case IsBinary(IsConstant(a), op, IsConstant(b)) =>
         Option(Expr.Numerical.Binary(a, op, b))
       case _ =>
         None
