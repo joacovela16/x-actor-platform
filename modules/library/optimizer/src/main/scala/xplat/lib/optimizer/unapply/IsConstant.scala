@@ -11,8 +11,6 @@ case object IsConstant {
         Option(expr)
       case Expr.Numerical.Constant(_) =>
         Option(expr)
-      case Expr.Numerical.Binary(IsConstant(_), _, IsConstant(_)) =>
-        Option(expr)
       case _ =>
         None
     }

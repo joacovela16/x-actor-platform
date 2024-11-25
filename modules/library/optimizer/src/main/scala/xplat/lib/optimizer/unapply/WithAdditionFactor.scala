@@ -13,7 +13,7 @@ case object WithAdditionFactor {
             case Arithmentics.Minus => -1
           }
         }
-        Option((f1, e1, sign * f2, e2))
+        Option((f1, e1, if (sign == 1) f2 else sign * f2, e2))
       case IsBinary(e1, IsAddition(op), WithConstantFactor(f2, e2)) =>
         val sign = {
           op match {

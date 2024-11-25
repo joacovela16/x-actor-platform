@@ -1,7 +1,7 @@
 package xplat.lib.optimizer
 
 import org.scalatest.funsuite.AnyFunSuite
-import xplat.lib.optimizer.solver.Simplifier
+import xplat.lib.optimizer.solver.{Arranger, Simplifier}
 
 class SimplifierTest extends AnyFunSuite with OptimizerDSL {
   val x1 = variable[Int]

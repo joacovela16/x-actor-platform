@@ -79,14 +79,14 @@ object Simplifier {
 //      case WithAdditionFactor(f1, IsNotVar(e1), f2, IsVar(v1)) =>
 //        simplifyLoop(f2 * v1 + f1 * e1)
       // (x + y) + y => x + 2y
-     /* case IsBinary(IsBinary(l1, Arithmentics.Plus, IsVarFactor(f1, v1)), Arithmentics.Plus, IsVarFactor(f2, v2)) if v1.id == v2.id =>
+      case IsBinary(IsBinary(l1, Arithmentics.Plus, IsVarFactor(f1, v1)), Arithmentics.Plus, IsVarFactor(f2, v2)) if v1.id == v2.id =>
         simplifyLoop(
           Expr.Numerical.Binary(
             simplifyLoop(l1),
             Arithmentics.Plus,
             simplifyLoop((f1 + f2) * v1)
           )
-        )*/
+        )
       // 2 * (a + b) => 2*a + 2*b
       case IsBinary(IsConstant(data), Arithmentics.Times, AdditionExpr(l, op, r)) =>
         simplifyLoop(
@@ -122,10 +122,10 @@ object Simplifier {
         }
       // x3 + (x2 + x1) => x1 + x2 + x3
       // 2*x3 + (x2 + x1) => x1 + x2 + 2*x3
-      case WithAdditionFactor(f1, IsVar(v1), f2, WithAdditionFactor(f3, e, f4, IsVar(v3))) if v3.id < v1.id =>
-        simplifyLoop(
-          f4 * f2 * f3 + f1 * v1 + f2 * f3 * e
-        )
+//      case WithAdditionFactor(f1, IsVar(v1), f2, WithAdditionFactor(f3, e, f4, IsVar(v3))) if v3.id < v1.id =>
+//        simplifyLoop(
+//          f4 * f2 * f3 + f1 * v1 + f2 * f3 * e
+//        )
       // (2x + y) + x => (2x + x) + y
       case WithAdditionFactor(f1, WithAdditionFactor(f2, IsVar(v1), f3, e), f4, IsVar(v3)) if v3.id < v1.id =>
         simplifyLoop(f4 * v3) + simplifyLoop(f1 * (f3 * e + f2 * v1))
