@@ -97,4 +97,10 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
     )
   }
 
+  test("21") {
+    pprint.pprintln(
+      Arranger(x1 * x2 + x1)
+    )
+  }
+
 }
