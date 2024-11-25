@@ -49,4 +49,12 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
     assert(Simplifier.simplify(p1 + x1) == x1 + p1)
   }
 
+  test("09") {
+    assert(Simplifier.simplify(p1 * x4 + x3 + p2 * x2 + x1 + x2) == x1 + (p2 + 1) * x2 + x3 + p1 * x4)
+  }
+
+  test("10") {
+    assert(Simplifier.simplify(p1 * x4 + x3 + 2 * p2 * x2 + x1 + x2) == x1 + (2 * p2 + 1) * x2 + x3 + p1 * x4)
+  }
+
 }

@@ -2,7 +2,6 @@ package xplat.lib.optimizer.unapply
 
 import xplat.lib.optimizer.model.dsl.Expr
 
-
 case object IsConstant {
 
   def unapply(expr: Expr.Numerical): Option[Expr.Numerical] = {
@@ -11,6 +10,8 @@ case object IsConstant {
         Option(expr)
       case Expr.Numerical.Constant(_) =>
         Option(expr)
+      case IsBinary(IsConstant(a), IsFactor(op), IsConstant(b)) =>
+        Option(Expr.Numerical.Binary(a, op, b))
       case _ =>
         None
     }

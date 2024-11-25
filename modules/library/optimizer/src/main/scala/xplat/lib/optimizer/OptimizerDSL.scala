@@ -8,7 +8,9 @@ trait OptimizerDSL {
 
   implicit class DoublePredef(n: Double) {
     def *[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Times, v)
+    def *[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Times, v)
     def +[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Plus, v)
+    def +[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Plus, v)
   }
 
   implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)

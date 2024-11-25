@@ -12,6 +12,7 @@ object Arranger {
         a.id < b.id
       case (_, IsConstant(_)) => true
       case (IsConstant(_), _) => false
+
     }
     val r = rebuild(s)
     r
@@ -39,6 +40,8 @@ object Arranger {
           }
         }
         flatten(e1) ++ flatten(e2).map(e => if (sign == 1) e else sign * e)
+      case e =>
+        Seq(e)
     }
   }
 
