@@ -73,8 +73,8 @@ object Simplifier {
         simplifyLoop(
           Expr.Numerical.Binary(
             simplifyLoop(l1),
-            Arithmentics.Plus,
-            op2.withSign(simplifyLoop((f1 + f2) * op1.withSign(v1)))
+            op1,
+            simplifyLoop((op1.withSign(f1) + op2.withSign(f2)) * v1)
           )
         )
 
@@ -111,11 +111,30 @@ object Simplifier {
         simplifyLoop(e)
 
       case IsBinary(a, op, b) =>
-        Expr.Numerical.Binary(
+        val result = Expr.Numerical.Binary(
           simplifyLoop(a),
           op,
           simplifyLoop(b)
         )
+
+        result match {
+          case IsBinary(IsLiteral(0), Arithmentics.Times, _) =>
+            0
+          case IsBinary(_, Arithmentics.Times, IsLiteral(0)) =>
+            0
+          case IsBinary(IsLiteral(1), Arithmentics.Times, e) =>
+            e
+          case IsBinary(e, Arithmentics.Times, IsLiteral(1)) =>
+            simplifyLoop(e)
+          case IsBinary(e, Arithmentics.Plus, IsLiteral(0)) =>
+            simplifyLoop(e)
+          case IsBinary(IsLiteral(0), Arithmentics.Plus, e) =>
+            simplifyLoop(e)
+          case IsBinary(IsConstantReducible(_), _, IsConstantReducible(_)) =>
+            simplifyLoop(result)
+          case _ =>
+            result
+        }
       case e =>
         e
     }

@@ -1,6 +1,7 @@
 package xplat.lib.optimizer
 
 import org.scalatest.funsuite.AnyFunSuite
+import xplat.lib.optimizer.model.dsl.Expr
 import xplat.lib.optimizer.solver.Simplifier
 
 class SimplifierTest extends AnyFunSuite with OptimizerDSL {
@@ -68,6 +69,14 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
 
   test("14") {
     assert(Simplifier(p1 * x1 + p2 * x1 + p3 * x1) == (p1 + (p2 + p3)) * x1)
+  }
+
+  test("15") {
+    assert(Simplifier((5 + x1) - x1) == Expr.Numerical(5))
+  }
+
+  test("16") {
+    assert(Simplifier(p1 * (x1 + x2 + x3)) == p1 * x1 + p1 * x2 + p1 * x3)
   }
 
 }
