@@ -2,7 +2,7 @@ package xplat.lib.optimizer
 
 import org.scalatest.funsuite.AnyFunSuite
 import xplat.lib.optimizer.model.dsl.Expr
-import xplat.lib.optimizer.solver.Simplifier
+import xplat.lib.optimizer.solver.{Arranger, Simplifier}
 
 class SimplifierTest extends AnyFunSuite with OptimizerDSL {
   val x1 = variable[Int]
@@ -93,7 +93,7 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
 
   test("20") {
     pprint.pprintln(
-      Simplifier(x1 / x2 + x1)
+      Arranger(x1 / x2 + x1)
     )
   }
 
