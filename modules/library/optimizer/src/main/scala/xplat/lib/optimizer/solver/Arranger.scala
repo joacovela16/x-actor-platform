@@ -10,7 +10,8 @@ object Arranger {
     val s = f.sortWith {
       case (IsVarFactor(_, a), IsVarFactor(_, b)) =>
         a.id < b.id
-      case (_, IsConstant(_)) => false
+      case (_, IsConstant(_)) => true
+      case (IsConstant(_), _) => false
     }
     val r = rebuild(s)
     r

@@ -4,7 +4,7 @@ import xplat.lib.optimizer.model.dsl.{Arithmentics, Expr}
 
 case object WithAdditionFactor {
 
-  def unapply(expr: Expr.Numerical): Option[(Double, Expr.Numerical, Double, Expr.Numerical)] = {
+  def unapply(expr: Expr.Numerical): Option[(Expr.Numerical, Expr.Numerical, Expr.Numerical, Expr.Numerical)] = {
     expr match {
       case IsBinary(WithConstantFactor(f1, e1), IsAddition(op), WithConstantFactor(f2, e2)) =>
         val sign = {

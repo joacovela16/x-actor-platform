@@ -50,9 +50,9 @@ object Simplifier {
   }
 
   def simplify(expr: Expr.Numerical): Expr.Numerical = {
-//    simplifyLoop(
-    Arranger(expr)
-//    )
+    simplifyLoop(
+      Arranger(expr)
+    )
   }
 
   private def simplifyLoop(expr: Expr.Numerical): Expr.Numerical = {
@@ -60,8 +60,6 @@ object Simplifier {
       // ************** BASE **************//
       case IsConstant(e) =>
         e
-      case IsVarFactor(_, _) =>
-        expr
       case Expr.Numerical.Summatory(domain, condition, body) =>
         Expr.Numerical.Summatory(domain, condition, simplifyLoop(body))
       case IsBinary(IsLiteral(0), Arithmentics.Times, _) =>
@@ -74,21 +72,21 @@ object Simplifier {
         simplifyLoop(e)
       // ************** rearrange **************//
       // moves variables to left
-      case WithAdditionFactor(f1, IsConstant(a), f2, IsVar(b)) =>
-        simplifyLoop(
-          f2 * b + f1 * a
-        )
-      case WithAdditionFactor(f1, IsNotVar(e1), f2, IsVar(v1)) =>
-        simplifyLoop(f2 * v1 + f1 * e1)
+//      case WithAdditionFactor(f1, IsConstant(a), f2, IsVar(b)) =>
+//        simplifyLoop(
+//          f2 * b + f1 * a
+//        )
+//      case WithAdditionFactor(f1, IsNotVar(e1), f2, IsVar(v1)) =>
+//        simplifyLoop(f2 * v1 + f1 * e1)
       // (x + y) + y => x + 2y
-      case IsBinary(IsBinary(l1, Arithmentics.Plus, IsVarFactor(f1, v1)), Arithmentics.Plus, IsVarFactor(f2, v2)) if v1.id == v2.id =>
+     /* case IsBinary(IsBinary(l1, Arithmentics.Plus, IsVarFactor(f1, v1)), Arithmentics.Plus, IsVarFactor(f2, v2)) if v1.id == v2.id =>
         simplifyLoop(
           Expr.Numerical.Binary(
             simplifyLoop(l1),
             Arithmentics.Plus,
             simplifyLoop((f1 + f2) * v1)
           )
-        )
+        )*/
       // 2 * (a + b) => 2*a + 2*b
       case IsBinary(IsConstant(data), Arithmentics.Times, AdditionExpr(l, op, r)) =>
         simplifyLoop(

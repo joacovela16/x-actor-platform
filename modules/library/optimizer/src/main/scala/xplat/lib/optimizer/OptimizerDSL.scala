@@ -1,16 +1,18 @@
 package xplat.lib.optimizer
 
-import xplat.lib.optimizer.model.dsl.{Arithmentics, Datum, DomainType, ElseDecl, Expr, IsNumber, Model, NumberType, ObjectiveKind, Param, SSet, SubjectTo, SumBuilder, Typed, Var}
+import xplat.lib.optimizer.model.dsl._
 
 import scala.language.implicitConversions
 
 trait OptimizerDSL {
 
-  implicit class DoublePredef(n: Int) {
+  implicit class DoublePredef(n: Double) {
     def *[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Times, v)
+    def +[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.Binary(n, Arithmentics.Plus, v)
   }
 
   implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
+  implicit def mk[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.GetParam(Nil, v.asDecl)
 
   def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
 
@@ -34,6 +36,4 @@ trait OptimizerDSL {
 
 }
 
-object OptimizerDSL extends OptimizerDSL {
-
-}
+object OptimizerDSL extends OptimizerDSL {}
