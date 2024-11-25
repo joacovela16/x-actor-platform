@@ -80,7 +80,21 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
   }
 
   test("17") {
-    assert(Simplifier(p1/2 * (x1 + x2 + x3)) == p1/2 * x1 + p1/2 * x2 + p1/2 * x3)
+    assert(Simplifier(p1 / 2 * (x1 + x2 + x3)) == p1 / 2 * x1 + p1 / 2 * x2 + p1 / 2 * x3)
+  }
+
+  test("18") {
+    assert(Simplifier(x1 - x1 + x1 - x1) == Expr.Numerical(0))
+  }
+
+  test("19") {
+    assert(Simplifier(x4 + x1 + x3 + x2) == x1 + x2 + x3 + x4)
+  }
+
+  test("20") {
+    pprint.pprintln(
+      Simplifier(x1 / x2 + x1)
+    )
   }
 
 }
