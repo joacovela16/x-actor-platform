@@ -7,18 +7,21 @@ object Arranger {
 
   def apply(expr: Expr.Numerical): Expr.Numerical = {
     val f = flatten(expr)
-    val s = f.sortWith {
-      case (GetVar(a), GetVar(b)) =>
-        a < b
-      case (_, IsConstant(_)) => true
-      case (IsConstant(_), _) => false
-
-    }
+    val s = f.sortWith(partitioner)
     val r = rebuild(s)
     r
   }
 
-  private def rebuild(items: Seq[Expr.Numerical]): Expr.Numerical = {
+  def partitioner(a: Expr.Numerical, b: Expr.Numerical): Boolean = {
+    (a, b) match {
+      case (GetVar(a), GetVar(b)) =>
+        a < b
+      case (_, IsConstant(_)) => true
+      case (IsConstant(_), _) => false
+    }
+  }
+
+  def rebuild(items: Seq[Expr.Numerical]): Expr.Numerical = {
 
     items match {
       case head +: tail =>
@@ -28,7 +31,7 @@ object Arranger {
     }
   }
 
-  private def flatten(expr: Expr.Numerical): Seq[Expr.Numerical] = {
+  def flatten(expr: Expr.Numerical): Seq[Expr.Numerical] = {
     expr match {
       case IsConstant(e) =>
         Seq(e)

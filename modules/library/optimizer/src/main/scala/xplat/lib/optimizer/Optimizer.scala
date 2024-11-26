@@ -16,7 +16,7 @@ object Optimizer {
     val c = countConstraint(model, context)
     pprint.pprintln(
       model.constraints.map { c =>
-        Simplifier.simplify(c)
+        Simplifier(c)
       }
     )
     c

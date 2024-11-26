@@ -1,51 +1,48 @@
 package xplat.lib.optimizer.solver
 
 import xplat.lib.optimizer.model.dsl.Expr.Logical
-import xplat.lib.optimizer.model.dsl.{Arithmentics, Expr}
+import xplat.lib.optimizer.model.dsl.{Arithmentics, Expr, Relations}
 import xplat.lib.optimizer.unapply._
-
-import scala.annotation.tailrec
 
 object Simplifier {
 
-  @tailrec
-  def simplify(expr: Expr.Logical): Expr.Logical = {
+  private def partition(expr: Expr.Numerical): (Seq[Expr.Numerical], Seq[Expr.Numerical]) = {
+    Arranger.flatten(Simplifier(expr)).partition {
+      case IsConstant(_) =>
+        false
+      case _ =>
+        true
+    }
+  }
+
+  def apply(expr: Expr.Logical): Expr.Logical = {
     expr match {
       // a + 5 <= 7 => a <= 7 - 5
-      case Logical.Relation(IsBinary(a, IsAddition(op), IsConstant(c)), operator, right) =>
-        simplify(
-          Logical.Relation(
-            Simplifier(a),
-            operator, {
+      case Expr.Logical.Relation(e1, op, e2) =>
+        val (t1, c1) = partition(e1)
+        val (t2, c2) = partition(e2)
 
-              val sign = op match {
-                case Arithmentics.Plus =>
-                  -1
-                case Arithmentics.Minus =>
-                  1
-              }
-
-              Simplifier(
-                Expr.Numerical.Binary(
-                  Expr.Numerical.Binary(sign, Arithmentics.Times, c),
-                  Arithmentics.Plus,
-                  right
-                )
-              )
-            }
-          )
-        )
+        op match {
+          case Relations.Equals => ???
+          case Relations.Less   => ???
+          case Relations.LessEqual =>
+            val s1 = Simplifier(Arranger.rebuild(t1 ++ t2.map(e => -1 * e)))
+            val s2 = Simplifier(Arranger.rebuild(c2 ++ c1.map(e => -1 * e)))
+            Expr.Logical.Relation(s1, op, s2)
+          case Relations.Great      => ???
+          case Relations.GreatEqual => ???
+        }
       case e =>
         e
     }
   }
 
-  def simplify(expr: Expr.Constraint): Expr.Constraint = {
+  def apply(expr: Expr.Constraint): Expr.Constraint = {
     expr match {
       case Expr.Constraint.Forall(domain, condition, body) =>
-        Expr.Constraint.Forall(domain, condition, simplify(body))
+        Expr.Constraint.Forall(domain, condition, Simplifier(body))
       case Expr.Constraint.Relation(body) =>
-        Expr.Constraint.Relation(simplify(body))
+        Expr.Constraint.Relation(Simplifier(body))
     }
   }
 
@@ -68,6 +65,14 @@ object Simplifier {
         simplifyLoop(e)
       case IsBinary(IsLiteral(1), Arithmentics.Times, e) =>
         simplifyLoop(e)
+      case IsBinary(IsConstantReducible(e1), IsFactor(op1), IsBinary(IsConstantReducible(e2), IsFactor(op2), e3)) =>
+        simplifyLoop(
+          Expr.Numerical.Binary(
+            simplifyLoop(Expr.Numerical.Binary(e1, op1, e2)),
+            op2,
+            simplifyLoop(e3)
+          )
+        )
       // (? + y) + y => x + 2y
       case IsBinary(IsBinary(l1, IsAddition(op1), IsVarFactor(f1, v1)), IsAddition(op2), IsVarFactor(f2, v2)) if v1.id == v2.id =>
         simplifyLoop(
@@ -77,7 +82,9 @@ object Simplifier {
             simplifyLoop((op1.withSign(f1) + op2.withSign(f2)) * v1)
           )
         )
-
+        // ? + (-1*x) = ? - x
+      case IsBinary(e1, IsAddition(op), IsBinary(IsLiteral(-1), Arithmentics.Times, e2)) =>
+        simplifyLoop(Expr.Numerical.Binary(e1, if (op.sign == 1) Arithmentics.Minus else Arithmentics.Plus, e2))
       // 2 * (a + b) => 2*a + 2*b
       case IsBinary(IsConstant(data), Arithmentics.Times, AdditionExpr(l, op, r)) =>
         simplifyLoop(
@@ -131,6 +138,8 @@ object Simplifier {
           case IsBinary(IsLiteral(0), Arithmentics.Plus, e) =>
             simplifyLoop(e)
           case IsBinary(IsConstantReducible(_), _, IsConstantReducible(_)) =>
+            simplifyLoop(result)
+          case IsBinary(IsVarFactor(_, v1), IsAddition(_), IsVarFactor(_, v2)) if v1.id == v2.id =>
             simplifyLoop(result)
           case _ =>
             result

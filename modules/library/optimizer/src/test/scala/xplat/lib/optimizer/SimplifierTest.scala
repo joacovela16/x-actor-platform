@@ -2,7 +2,7 @@ package xplat.lib.optimizer
 
 import org.scalatest.funsuite.AnyFunSuite
 import xplat.lib.optimizer.model.dsl.Expr
-import xplat.lib.optimizer.solver.{Arranger, Simplifier}
+import xplat.lib.optimizer.solver.Simplifier
 
 class SimplifierTest extends AnyFunSuite with OptimizerDSL {
   val x1 = variable[Int]
@@ -92,15 +92,35 @@ class SimplifierTest extends AnyFunSuite with OptimizerDSL {
   }
 
   test("20") {
-    pprint.pprintln(
-      Arranger(x1 / x2 + x1)
-    )
+    assert(Simplifier(x1 / x2 + x1) == x1 + x1 / x2)
   }
 
   test("21") {
-    pprint.pprintln(
-      Arranger(x1 * x2 + x1)
-    )
+    assert(Simplifier(x1 * x2 + x1) == x1 + x1 * x2)
+  }
+
+  test("22") {
+    assert(Simplifier((1 / 2.0) * x1 + (3 / 2.0) * x1) == 2 * x1)
+  }
+
+  test("23") {
+    assert(Simplifier(1 + 2 + 3 + 4 + 5) == Expr.Numerical(15))
+  }
+
+  test("24") {
+    assert(Simplifier(2 + 5 + x1) == x1 + 7)
+  }
+
+  test("25") {
+    assert(Simplifier(x1 + 5 <= 7) == x1 <= 2)
+  }
+
+  test("26") {
+    assert(Simplifier(2 * x1 + 5 <= 7 + x1) == x1 <= 2)
+  }
+
+  test("27") {
+    assert(Simplifier(x1 + 5 <= 7 + (2 * x1) + x2) == -1 * x1 - x2 <= 2)
   }
 
 }
