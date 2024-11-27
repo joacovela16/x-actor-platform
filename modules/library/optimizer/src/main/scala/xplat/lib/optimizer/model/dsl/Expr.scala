@@ -1,5 +1,7 @@
 package xplat.lib.optimizer.model.dsl
 
+import com.softwaremill.quicklens.ModifyPimp
+
 import scala.language.implicitConversions
 
 sealed trait Expr
@@ -8,7 +10,9 @@ object Expr {
 
   sealed trait Declaration extends Expr {
     def id: String
+    def indexedId: String = id
     def domain: Seq[SetDecl]
+    def withIndexedId(v: String): Declaration = this
   }
 
   object Declaration {
@@ -24,8 +28,13 @@ object Expr {
         kind: NumberType,
         lowerBound: Option[Double] = None,
         upperBound: Option[Double] = None,
-        domain: Seq[SetDecl] = Nil
-    ) extends Expr.Declaration
+        domain: Seq[SetDecl] = Nil,
+        localIndexedId: Option[String]
+    ) extends Expr.Declaration {
+      override def withIndexedId(v: String): Declaration = this.modify(_.localIndexedId).setTo(Option(v))
+
+      override def indexedId: String = localIndexedId.getOrElse(id)
+    }
 
     final case class ParamDecl(
         id: String,
@@ -63,12 +72,9 @@ object Expr {
     final case class Summatory(domain: Seq[SetDecl], condition: Expr.Predicate.Logical, body: Expr.Numerical) extends Expr.Numerical
 
     final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
-      def id: String = references match{
-        case Nil =>
-          over.id
-        case xs =>
-          s"${over.id}_${xs.map(_.referenceTo).mkString}"
-      }
+
+      def id: String = over.indexedId
+
       override def isVariable: Boolean = true
     }
 

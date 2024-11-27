@@ -14,13 +14,6 @@ final case class Var[T, Domain](
     val refs = ops.asReference(value)
     Var(id, kind, lowerBound = lowerBound, upperBound = upperBound, domain = refs)
   }
-//
-//  def +(other: Expr.Numerical): Expr.Numerical = Expr.Numerical.Binary()
-//  def *(other: Expr.Numerical): Expr.Numerical = ???
-//  def -(other: Expr.Numerical): Expr.Numerical = ???
-//  def /(other: Expr.Numerical): Expr.Numerical = ???
-
-//  private val asGet = Expr.Numerical.GetVar(id, )
 
   val asDecl: Expr.Declaration = {
     Expr.Declaration.VarDecl(
@@ -28,7 +21,8 @@ final case class Var[T, Domain](
       kind = kind,
       lowerBound = lowerBound,
       upperBound = upperBound,
-      domain = domain
+      domain = domain,
+      localIndexedId = None
     )
   }
 
@@ -37,6 +31,7 @@ final case class Var[T, Domain](
 object Var {
 
   implicit class Get[T, D, Apply](v: Var[T, D])(implicit get: VariableGet.Aux[D, Apply]) {
+
     def apply(a: Apply): Expr.Numerical = {
       Expr.Numerical.GetVar(get(a), v.asDecl)
     }

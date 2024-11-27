@@ -15,8 +15,8 @@ class ExpanderTest extends AnyFunSuite with OptimizerDSL {
 
   val model = maximize(sum(P)(j => c(j) * x(j))).subjectTo(
     sum(P)(j => (1.0 / a(j)) + x(j)) <= b,
-//    forall(P)(j => x(j) <= u(j)),
-//    forall(P)(j => x(j) >= 0)
+    forall(P)(j => x(j) <= u(j)),
+    forall(P)(j => x(j) >= 0)
   )
 
   val context = Context()
@@ -31,4 +31,5 @@ class ExpanderTest extends AnyFunSuite with OptimizerDSL {
       Expander(model, context)
     )
   }
+
 }
