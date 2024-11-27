@@ -36,8 +36,6 @@ object Evaluators {
           case Logical.Constant(data) =>
             data
         }
-//      case Predicate.Constant(data) =>
-//        data
     }
   }
 
@@ -70,11 +68,8 @@ object Evaluators {
           case _ =>
             ???
         }
-      case Expr.Numerical.GetVar(references, over) =>
-        val indexed = context.args
-        val suffix = references.map(i => indexed(i.referenceTo)).mkString
-        val id = s"${over.id}_$suffix"
-        context.variables(id)
+      case Expr.Numerical.GetVar(_, over) =>
+        context.variables(over.indexedId)
       case Expr.Numerical.Constant(data) =>
         data
     }
