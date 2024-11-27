@@ -18,6 +18,7 @@ object Arranger {
         a < b
       case (_, IsConstant(_)) => true
       case (IsConstant(_), _) => false
+      case _                  => false
     }
   }
 

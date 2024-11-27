@@ -17,6 +17,8 @@ final case class Context(
   def put(id: String, data: Context.Data): Context = this.modify(_.input).using(xs => xs + (id -> data))
   def withoutArgs: Context = this.modify(_.args).setTo(Map.empty)
 
+//  def getStream(source: Seq[SetDecl]): LazyList[Context] = getStream(source.map(_.id))
+
   def getStream(source: Seq[String]): LazyList[Context] = {
     val base: Seq[(String, LazyList[Datum])] = source.flatMap { id =>
       input.get(id).collect { case Context.Data.Set(data) => data }.map(xs => id -> xs)

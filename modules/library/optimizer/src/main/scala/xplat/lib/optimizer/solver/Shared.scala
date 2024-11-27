@@ -1,15 +1,9 @@
 package xplat.lib.optimizer.solver
 
-import xplat.lib.optimizer.model.dsl.Arithmentics.Times
 import xplat.lib.optimizer.model.dsl.Context.Data
-import xplat.lib.optimizer.model.dsl.Expr.{Logical, Numerical}
 import xplat.lib.optimizer.model.dsl._
-import xplat.lib.optimizer.unapply.{AdditionExpr, IsAddition, WithAdditionFactor, IsBinary, IsConstant, IsLiteral, IsVar, IsVarFactor}
-
-import scala.annotation.tailrec
 
 object Shared {
-
 
   def extractMetadata(expr: Expr.Constraint): Seq[Metadata] = {
     expr match {
@@ -20,9 +14,9 @@ object Shared {
     }
   }
 
-  def extractMetadata(expr: Expr.Logical): Seq[Metadata] = {
+  def extractMetadata(expr: Expr.Predicate): Seq[Metadata] = {
     expr match {
-      case Expr.Logical.Relation(left, _, right) =>
+      case Expr.Predicate.Relation(left, _, right) =>
         val l = extractMetadata(left)
         val r = extractMetadata(right)
 
@@ -97,77 +91,10 @@ object Shared {
     }
   }
 
-  def isLineal(context: Context, expr: Expr.Logical): Boolean = {
-    expr match {
-      case Expr.Logical.Relation(left, operator, right) => ???
-      case _                                            => true
-    }
-  }
-
   def evalForAll(context: Context, forall: Expr.Constraint.Forall): LazyList[Context] = {
-    context.getStream(forall.domain.map(_.id)).filter(c => evalBoolean(c, forall.condition))
+    context.getStream(forall.domain.map(_.id)).filter(c => Evaluators.evalBoolean(forall.condition, c))
   }
 
-  def evalDouble(context: Context, expr: Expr.Numerical): Double = {
-    expr match {
-      case Expr.Numerical.Binary(left, operator, right) =>
-        val l = evalDouble(context, left)
-        val r = evalDouble(context, right)
-        operator match {
-          case Arithmentics.Plus =>
-            l + r
-          case Arithmentics.Minus =>
-            l - r
-          case Arithmentics.Times =>
-            l * r
-          case Arithmentics.Divide =>
-            l / r
-        }
-      case Expr.Numerical.Summatory(domain, condition, body) =>
-        context.withoutArgs.getStream(domain.map(_.id)).filter(c => evalBoolean(c, condition)).map(c => evalDouble(c, body)).sum
-      case Expr.Numerical.GetParam(references, over) =>
-        val indexed = context.args
-        val suffix = references.map(i => indexed(i.referenceTo)).mkString
 
-        context.input(over.id) match {
-          case Data.Param1(data) =>
-            data
-          case Data.Param2(data) =>
-            data(suffix)
-          case _ =>
-            ???
-        }
-      case Expr.Numerical.GetVar(references, over) =>
-        val indexed = context.args
-        val suffix = references.map(i => indexed(i.referenceTo)).mkString
-        val id = s"${over.id}_$suffix"
-        context.variables(id)
-      case Expr.Numerical.Constant(data) =>
-        data
-    }
-  }
-
-  def evalBoolean(context: Context, expr: Expr.Logical): Boolean = {
-    expr match {
-      case Expr.Logical.Relation(left, operator, right) =>
-        val l = evalDouble(context, left)
-        val r = evalDouble(context, right)
-
-        operator match {
-          case Relations.Equals =>
-            l == r
-          case Relations.Less =>
-            l < r
-          case Relations.LessEqual =>
-            l <= r
-          case Relations.Great =>
-            l > r
-          case Relations.GreatEqual =>
-            l >= r
-        }
-      case Expr.Logical.Constant(data) =>
-        data
-    }
-  }
 
 }

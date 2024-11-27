@@ -15,8 +15,10 @@ trait OptimizerDSL {
 
   implicit def mk[T](v: Var[T, Unit]): Expr.Numerical = Expr.Numerical.GetVar(Nil, v.asDecl)
   implicit def mk[T](v: Param[T, Unit]): Expr.Numerical = Expr.Numerical.GetParam(Nil, v.asDecl)
+  implicit def mkFromInt(v: Arg[Int]): Expr.Numerical = Expr.Numerical.GetParam(Nil, Expr.Declaration.ArgDecl(v.asRef))
+  implicit def mkFromDouble(v: Arg[Double]): Expr.Numerical = Expr.Numerical.GetParam(Nil, Expr.Declaration.ArgDecl(v.asRef))
 
-  def If(cond: Expr.Logical)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
+  def If(cond: Expr.Predicate)(thenBody: Expr.Numerical): ElseDecl = ElseDecl(cond, Nil, thenBody)
 
   def set[T](implicit sc: sourcecode.Name, v: Typed[T, DomainType]): SSet[T] = SSet.Open(sc.value)
   def set[T](head: T, tail: T*)(implicit sc: sourcecode.Name, c: Datum.Codec[T]): SSet[T] = SSet.Literal(sc.value, head +: tail, c)
@@ -31,8 +33,8 @@ trait OptimizerDSL {
 
   def sum[D](value: D): SumBuilder[D] = SumBuilder(value)
 
-  def minimize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Min, expr, Nil)
-  def maximize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Max, expr, Nil)
+  def minimize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Min, expr, LazyList.empty)
+  def maximize(expr: Expr.Numerical): Model = Model(ObjectiveKind.Max, expr, LazyList.empty)
 
   def forall[D](value: D): SubjectTo[D] = SubjectTo(value)
 

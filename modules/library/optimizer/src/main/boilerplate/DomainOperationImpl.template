@@ -1,32 +1,36 @@
 package xplat.lib.optimizer.model.dsl
 
 trait DomainOperationImpl extends DomainOperationImplLP{
-[2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[([#SSet[A1]#, ]), ([#A1#, ]), ([#Arg[A1]#, ]) => Expr.Numerical, ([#Arg[A1]#, ]) => Expr.Logical] = new DomainOperation[([#SSet[A1]#, ])]{
+[2..#implicit def a1[[#A1#, ]]: DomainOperation.Aux[
+([#SSet[A1]#, ]),
+([#A1#, ]),
+([#Arg[A1]#, ]) => Expr.Numerical,
+([#Arg[A1]#, ]) => Expr.Predicate.Logical,
+([#Arg[A1]#, ]) => Expr.Predicate.Relation
+   ] = new DomainOperation[([#SSet[A1]#, ])]{
     type Tuple = ([#A1#, ])
-    type Apply = ([#Arg[A1]#, ]) => Expr.Numerical
-    type Conditional = ([#Arg[A1]#, ]) => Expr.Logical
+    type Numerical = ([#Arg[A1]#, ]) => Expr.Numerical
+    type Conditional = ([#Arg[A1]#, ]) => Expr.Predicate.Logical
+    type Relation = ([#Arg[A1]#, ]) => Expr.Predicate.Relation
     override def asReference(d: ([#SSet[A1]#, ])): Seq[SetDecl] = Seq([#d._1.asDecl#])
-    override def apply(a:Apply): Seq[SetDecl] => Expr.Numerical = d => a([#Arg(0, d(0).id)#, ])
-    override def conditional(a: Conditional): Seq[SetDecl] => Expr.Logical = d => a([#Arg(0, d(0).id)#, ])
-    override def asStream(d: ([#SSet[A1]#, ]), c:Context): LazyList[Context] = {
-        ???
-    }
+    override def numerical(a:Numerical): Seq[SetDecl] => Expr.Numerical = d => a([#Arg(0, d(0).id)#, ])
+    override def conditional(a: Conditional): Seq[SetDecl] => Expr.Predicate.Logical = d => a([#Arg(0, d(0).id)#, ])
+    override def relation(a: Relation): Seq[SetDecl] => Expr.Predicate.Relation = d => a([#Arg(0, d(0).id)#, ])
 }
 #
 ]
 }
 
 trait DomainOperationImplLP{
-    implicit def a1[A1]: DomainOperation.Aux[SSet[A1], A1, Arg[A1] => Expr.Numerical, Arg[A1] => Expr.Logical] = new DomainOperation[SSet[A1]]{
+    implicit def a1[A1]: DomainOperation.Aux[SSet[A1], A1, Arg[A1] => Expr.Numerical, Arg[A1] => Expr.Predicate.Logical, Arg[A1] => Expr.Predicate.Relation] = new DomainOperation[SSet[A1]]{
         type Tuple = A1
-        type Apply = Arg[A1] => Expr.Numerical
-        type Conditional = Arg[A1] => Expr.Logical
+        type Numerical = Arg[A1] => Expr.Numerical
+        type Conditional = Arg[A1] => Expr.Predicate.Logical
+        type Relation = Arg[A1] => Expr.Predicate.Relation
         override def asReference(d: SSet[A1]): Seq[SetDecl] = Seq(d.asDecl)
-        override def apply(a:Apply): Seq[SetDecl] => Expr.Numerical = d => a(Arg(0, d(0).id))
-        override def conditional(a: Conditional): Seq[SetDecl] => Expr.Logical = d => a(Arg(0, d(0).id))
-        override def asStream(d: SSet[A1], c: Context): LazyList[Context] = {
-            ???
-        }
+        override def numerical(a:Numerical): Seq[SetDecl] => Expr.Numerical = d => a(Arg(0, d(0).id))
+        override def conditional(a: Conditional): Seq[SetDecl] => Expr.Predicate.Logical = d => a(Arg(0, d(0).id))
+        override def relation(a: Relation): Seq[SetDecl] => Expr.Predicate.Relation = d => a(Arg(0, d(0).id))
     }
 
 }

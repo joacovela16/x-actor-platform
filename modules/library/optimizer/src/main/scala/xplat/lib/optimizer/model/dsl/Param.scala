@@ -24,13 +24,14 @@ object Param {
       D,
       Tuple,
       Apply,
-      Conditional
+      Conditional,
+      Relation
   ](param: Param[T, Tuple])(implicit
-      ops: DomainOperation.Aux[D, Tuple, Apply, Conditional]
+      ops: DomainOperation.Aux[D, Tuple, Apply, Conditional, Relation]
   ) {
 
     def project(a: Apply): Param[T, Tuple] = {
-      Param(param.id, param.kind, param.domain, Option(ops(a)(param.domain)))
+      Param(param.id, param.kind, param.domain, Option(ops.numerical(a)(param.domain)))
     }
 
   }

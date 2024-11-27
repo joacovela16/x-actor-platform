@@ -1,9 +1,9 @@
 package xplat.lib.optimizer
 
 import cats.Monad
-import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
+import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Numerical, Predicate}
 import xplat.lib.optimizer.model.dsl._
-import xplat.lib.optimizer.solver.{Shared, Simplifier}
+import xplat.lib.optimizer.solver.Simplifier
 
 object Optimizer {
 
@@ -73,9 +73,9 @@ object Optimizer {
     ???
   }
 
-  private def evaluateBoolean(context: Context, expr: Expr.Logical): Boolean = {
+  private def evaluateBoolean(context: Context, expr: Expr.Predicate): Boolean = {
     expr match {
-      case Logical.Relation(left, operator, right) =>
+      case Predicate.Relation(left, operator, right) =>
         val l = evaluateDouble(context, left)
         val r = evaluateDouble(context, right)
         operator match {
@@ -85,8 +85,6 @@ object Optimizer {
           case Relations.Great      => l > r
           case Relations.GreatEqual => l >= r
         }
-      case Logical.Constant(data) =>
-        data
     }
   }
 

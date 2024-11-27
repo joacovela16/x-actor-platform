@@ -13,6 +13,12 @@ object Expr {
 
   object Declaration {
 
+    final case class ArgDecl(decl: Arg.Ref) extends Expr.Declaration {
+      override def id: String = decl.referenceTo
+
+      override def domain: Seq[SetDecl] = Nil
+    }
+
     final case class VarDecl(
         id: String,
         kind: NumberType,
@@ -33,8 +39,8 @@ object Expr {
   sealed trait Statement extends Expr
 
   object Statement {
-    final case class If(cond: Expr.Logical, thenBody: Expr.Numerical, elseIf: Seq[(Expr.Logical, Expr.Numerical)], elseBody: Expr.Numerical) extends Expr.Statement
-    final case class Switch(access: Expr.Statement, cases: Seq[(Expr.Logical, Expr.Numerical)], defaultBody: Expr.Numerical) extends Expr.Statement
+    final case class If(cond: Expr.Predicate, thenBody: Expr.Numerical, elseIf: Seq[(Expr.Predicate, Expr.Numerical)], elseBody: Expr.Numerical) extends Expr.Statement
+    final case class Switch(access: Expr.Statement, cases: Seq[(Expr.Predicate, Expr.Numerical)], defaultBody: Expr.Numerical) extends Expr.Statement
   }
 
   sealed trait Numerical extends Expr {
@@ -42,22 +48,27 @@ object Expr {
     def *(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Times, other)
     def -(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Minus, other)
     def /(other: Numerical): Numerical = Expr.Numerical.Binary(this, Arithmentics.Divide, other)
-    def <=(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.LessEqual, other)
-    def >=(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.GreatEqual, other)
-    def ===(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Equals, other)
-    def >(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Great, other)
-    def <(other: Numerical): Logical = Expr.Logical.Relation(this, Relations.Less, other)
+    def <=(other: Numerical): Predicate.Relation = Expr.Predicate.Relation(this, Relations.LessEqual, other)
+    def >=(other: Numerical): Predicate.Relation = Expr.Predicate.Relation(this, Relations.GreatEqual, other)
+    def ===(other: Numerical): Predicate.Relation = Expr.Predicate.Relation(this, Relations.Equals, other)
+    def >(other: Numerical): Predicate.Relation = Expr.Predicate.Relation(this, Relations.Great, other)
+    def <(other: Numerical): Predicate.Relation = Expr.Predicate.Relation(this, Relations.Less, other)
     def isStatic: Boolean = false
     def isVariable: Boolean = false
   }
 
   object Numerical {
-    def apply(n:Numerical):Numerical = n
+    def apply(n: Numerical): Numerical = n
     final case class Binary(left: Numerical, operator: Arithmentics, right: Numerical) extends Expr.Numerical
-    final case class Summatory(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Numerical) extends Expr.Numerical
+    final case class Summatory(domain: Seq[SetDecl], condition: Expr.Predicate.Logical, body: Expr.Numerical) extends Expr.Numerical
 
     final case class GetVar(references: Seq[Arg.Ref], over: Expr.Declaration) extends Expr.Numerical {
-      def id: String = over.id
+      def id: String = references match{
+        case Nil =>
+          over.id
+        case xs =>
+          s"${over.id}_${xs.map(_.referenceTo).mkString}"
+      }
       override def isVariable: Boolean = true
     }
 
@@ -75,26 +86,30 @@ object Expr {
 
   }
 
-  sealed trait Logical extends Expr
+  sealed trait Predicate extends Expr
 
-  object Logical {
+  object Predicate {
 
-    final case class Relation(left: Numerical, operator: Relations, right: Numerical) extends Expr.Logical
-    final case class Constant(data: Boolean) extends Expr.Logical
+    sealed trait Logical extends Predicate {}
 
-    implicit def mk(v: Boolean): Expr.Logical = Expr.Logical.Constant(v)
+    object Logical {
+      final case class Binary(left: Logical, operator: BinaryLogicOps, right: Logical) extends Expr.Predicate.Logical
+      final case class Not(body: Expr.Predicate) extends Expr.Predicate.Logical
+      final case class Constant(data: Boolean) extends Expr.Predicate.Logical
+      implicit def mk(v: Boolean): Logical = Constant(v)
+    }
+
+    final case class Relation(left: Numerical, operator: Relations, right: Numerical) extends Expr.Predicate
 
   }
 
   sealed trait Constraint extends Expr
 
   object Constraint {
-    final case class Forall(domain: Seq[SetDecl], condition: Expr.Logical, body: Expr.Logical) extends Expr.Constraint
-    final case class Relation(body: Expr.Logical) extends Expr.Constraint
+    final case class Forall(domain: Seq[SetDecl], condition: Expr.Predicate.Logical, body: Expr.Predicate.Relation) extends Expr.Constraint
+    final case class Relation(body: Expr.Predicate.Relation) extends Expr.Constraint
 
-    implicit def mk(v: Boolean): Expr.Constraint = Constraint.Relation(v)
-
-    implicit def mk(v: Expr.Logical): Expr.Constraint = Constraint.Relation(v)
+    implicit def mk(v: Expr.Predicate.Relation): Expr.Constraint = Constraint.Relation(v)
 
   }
 

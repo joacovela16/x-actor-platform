@@ -4,9 +4,9 @@ import cats.Monad
 import cats.data.State
 import com.softwaremill.quicklens.ModifyPimp
 import xplat.lib.optimizer.model.core.{Solver, Stage}
-import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Logical, Numerical}
-import xplat.lib.optimizer.model.dsl.{Relations, Context, Expr, Model}
-import xplat.lib.optimizer.solver.Shared
+import xplat.lib.optimizer.model.dsl.Expr.{Constraint, Numerical, Predicate}
+import xplat.lib.optimizer.model.dsl.{Context, Expr, Model, Relations}
+import xplat.lib.optimizer.solver.{Evaluators, Shared}
 
 final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
 
@@ -36,17 +36,17 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
     final case class Variable(id: String, factor: Double)
 
     def evalNumerical(expr: Expr.Numerical): Double = expr match {
-      case Numerical.Binary(left, operator, right) => ???
-      case Numerical.Summatory(domain, condition, body)  => ???
-      case Numerical.GetParam(references, over)    => ???
-      case Numerical.GetVar(references, over)      => ???
+      case Numerical.Binary(left, operator, right)      => ???
+      case Numerical.Summatory(domain, condition, body) => ???
+      case Numerical.GetParam(references, over)         => ???
+      case Numerical.GetVar(references, over)           => ???
       case Numerical.Constant(data) =>
         data
     }
 
-    def evalBool(expr: Expr.Logical): Boolean = {
+    def evalBool(expr: Expr.Predicate): Boolean = {
       expr match {
-        case Logical.Relation(left, operator, right) =>
+        case Predicate.Relation(left, operator, right) =>
           val l = evalNumerical(left)
           val r = evalNumerical(right)
 
@@ -57,8 +57,8 @@ final case class SimplexMain[F[_]]()(implicit M: Monad[F]) extends Solver[F] {
             case Relations.Great      => l > r
             case Relations.GreatEqual => l >= r
           }
-        case Logical.Constant(data) =>
-          data
+//        case Predicate.Constant(data) =>
+//          data
       }
     }
 
@@ -111,14 +111,14 @@ object SimplexMain {
         sideSign: Double
     ): Entry = {
       if (expr.isStatic) {
-        Shared.evalDouble(context, expr)
+        Evaluators.evalDouble(expr, context)
       }
 
       expr match {
         case Expr.Numerical.Binary(left, operator, right) =>
           val e = {
             if (left.isStatic && right.isStatic) {
-              val r = Shared.evalDouble(context, expr)
+              val r = Evaluators.evalDouble(expr, context)
               entry.mapTerm(x => x + r * sideSign)
             } else {}
             ???
@@ -126,7 +126,7 @@ object SimplexMain {
 
           val e1 = {
             if (left.isStatic) {
-              val r1 = Shared.evalDouble(context, left)
+              val r1 = Evaluators.evalDouble(left, context)
               entry.mapTerm(x => x + sideSign * r1)
             } else {
               entry
@@ -138,9 +138,9 @@ object SimplexMain {
           }
           ???
         case Expr.Numerical.Summatory(domain, condition, body) => ???
-        case Expr.Numerical.GetParam(references, over)   => ???
-        case Expr.Numerical.GetVar(references, over)     => ???
-        case _                                           => ???
+        case Expr.Numerical.GetParam(references, over)         => ???
+        case Expr.Numerical.GetVar(references, over)           => ???
+        case _                                                 => ???
       }
 
       entry
@@ -153,7 +153,7 @@ object SimplexMain {
         case datum: Expr.Constraint.Forall =>
           Shared.evalForAll(context, datum).foldLeft(acc) { case (acc2, c) =>
             datum.body match {
-              case datum: Expr.Logical.Relation =>
+              case datum: Expr.Predicate.Relation =>
                 val e1 = analyzeNumerical(context = c, expr = datum.left, entry = Entry(Nil, 0), sideSign = -1)
                 val e2 = analyzeNumerical(context = c, expr = datum.right, entry = e1, sideSign = 1)
                 acc2.withEntry(e2)

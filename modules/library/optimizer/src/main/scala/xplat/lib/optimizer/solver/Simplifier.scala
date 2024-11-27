@@ -1,7 +1,6 @@
 package xplat.lib.optimizer.solver
 
-import xplat.lib.optimizer.model.dsl.Expr.Logical
-import xplat.lib.optimizer.model.dsl.{Arithmentics, Expr, Relations}
+import xplat.lib.optimizer.model.dsl.{Arithmentics, Expr}
 import xplat.lib.optimizer.unapply._
 
 object Simplifier {
@@ -15,26 +14,12 @@ object Simplifier {
     }
   }
 
-  def apply(expr: Expr.Logical): Expr.Logical = {
-    expr match {
-      // a + 5 <= 7 => a <= 7 - 5
-      case Expr.Logical.Relation(e1, op, e2) =>
-        val (t1, c1) = partition(e1)
-        val (t2, c2) = partition(e2)
-
-        op match {
-          case Relations.Equals => ???
-          case Relations.Less   => ???
-          case Relations.LessEqual =>
-            val s1 = Simplifier(Arranger.rebuild(t1 ++ t2.map(e => -1 * e)))
-            val s2 = Simplifier(Arranger.rebuild(c2 ++ c1.map(e => -1 * e)))
-            Expr.Logical.Relation(s1, op, s2)
-          case Relations.Great      => ???
-          case Relations.GreatEqual => ???
-        }
-      case e =>
-        e
-    }
+  def apply(expr: Expr.Predicate.Relation): Expr.Predicate.Relation = {
+    val (t1, c1) = partition(expr.left)
+    val (t2, c2) = partition(expr.right)
+    val s1 = Simplifier(Arranger.rebuild(t1 ++ t2.map(e => -1 * e)))
+    val s2 = Simplifier(Arranger.rebuild(c2 ++ c1.map(e => -1 * e)))
+    Expr.Predicate.Relation(s1, expr.operator, s2)
   }
 
   def apply(expr: Expr.Constraint): Expr.Constraint = {
@@ -82,7 +67,7 @@ object Simplifier {
             simplifyLoop((op1.withSign(f1) + op2.withSign(f2)) * v1)
           )
         )
-        // ? + (-1*x) = ? - x
+      // ? + (-1*x) = ? - x
       case IsBinary(e1, IsAddition(op), IsBinary(IsLiteral(-1), Arithmentics.Times, e2)) =>
         simplifyLoop(Expr.Numerical.Binary(e1, if (op.sign == 1) Arithmentics.Minus else Arithmentics.Plus, e2))
       // 2 * (a + b) => 2*a + 2*b
