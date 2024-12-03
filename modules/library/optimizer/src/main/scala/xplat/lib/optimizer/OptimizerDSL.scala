@@ -25,11 +25,14 @@ trait OptimizerDSL {
   def set(from: Int, to: Int)(implicit sc: sourcecode.Name): SSet[Int] = SSet.Range(sc.value, from, to)
 
   def param[T](implicit k: Typed[T, NumberType], sc: sourcecode.Name): Param[T, Unit] = Param(sc.value, k.value)
-  def variable[T](implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = variable()
 
-  def variable[T](lowerBound: Option[T] = None, upperBound: Option[T] = None)(implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = {
-    Var(sc.value, t.value, lowerBound.map(k.asDouble), upperBound.map(k.asDouble))
+  def variable[T](implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = {
+    Var(sc.value, t.value)
   }
+
+//  def variable[T](lowerBound: Option[T] = None, upperBound: Option[T] = None)(implicit k: IsNumber[T], t: Typed[T, NumberType], sc: sourcecode.Name): Var[T, Unit] = {
+//    Var(sc.value, t.value, lowerBound.map(k.asDouble), upperBound.map(k.asDouble))
+//  }
 
   def sum[D](value: D): SumBuilder[D] = SumBuilder(value)
 

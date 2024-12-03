@@ -26,10 +26,9 @@ object Expr {
     final case class VarDecl(
         id: String,
         kind: NumberType,
-        lowerBound: Option[Double] = None,
-        upperBound: Option[Double] = None,
+        localIndexedId: Option[String],
         domain: Seq[SetDecl] = Nil,
-        localIndexedId: Option[String]
+        criterias: Seq[VariableCriteria]
     ) extends Expr.Declaration {
       override def withIndexedId(v: String): Declaration = this.modify(_.localIndexedId).setTo(Option(v))
 
@@ -96,7 +95,7 @@ object Expr {
 
   object Predicate {
 
-    sealed trait Logical extends Predicate {}
+    sealed trait Logical extends Predicate
 
     object Logical {
       final case class Binary(left: Logical, operator: BinaryLogicOps, right: Logical) extends Expr.Predicate.Logical

@@ -1,6 +1,6 @@
 package xplat.lib.optimizer.model.dsl
 
-sealed trait RelationType {}
+sealed trait RelationType
 
 object RelationType {
   case object GreatThan extends RelationType

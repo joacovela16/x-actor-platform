@@ -1,28 +1,32 @@
 package xplat.lib.optimizer.model.dsl
 
+import com.softwaremill.quicklens.ModifyPimp
+
 import scala.language.implicitConversions
 
 final case class Var[T, Domain](
     id: String,
     kind: NumberType,
-    lowerBound: Option[Double] = None,
-    upperBound: Option[Double] = None,
-    domain: Seq[SetDecl] = Nil
+    domain: Seq[SetDecl] = Nil,
+    criterias: Seq[VariableCriteria] = Nil
 ) {
+
+  def restrictedTo(head: VariableCriteria, tail: VariableCriteria*): Var[T, Domain] = {
+    this.modify(_.criterias).using(xs => xs ++ (head +: tail))
+  }
 
   def domain[Domain0](value: Domain0)(implicit ops: DomainOperation[Domain0]): Var[T, ops.Tuple] = {
     val refs = ops.asReference(value)
-    Var(id, kind, lowerBound = lowerBound, upperBound = upperBound, domain = refs)
+    Var(id, kind, domain = refs)
   }
 
   val asDecl: Expr.Declaration = {
     Expr.Declaration.VarDecl(
       id = id,
       kind = kind,
-      lowerBound = lowerBound,
-      upperBound = upperBound,
       domain = domain,
-      localIndexedId = None
+      localIndexedId = None,
+      criterias = Nil
     )
   }
 
