@@ -15,6 +15,7 @@ import xplat.core.io.actor.IOActorSystem.Command.{AddChild, ChildDown, OnMessage
 import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
+import cats.effect.std.Dispatcher
 
 final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(implicit A: Async[F]) extends ActorSystem[F] {
 
@@ -322,7 +323,9 @@ object IOActorSystem {
             A.pure(this)
         }
       }
+
     }
+
   }
 
   private final case class IOStash[F[_], T](private val queue: Queue[F, T], context: Context[F, T])(implicit A: Async[F]) extends Stash[F, T] {
@@ -445,27 +448,28 @@ object IOActorSystem {
 
     override def path: String = _path
 
-    override def ask[A](f: ActorRef[F, A] => T, timeout: FiniteDuration): F[A] = {
-      for {
-        onMessage <- Deferred[F, A]
-        ref <- spawn[A](
-          UUID.randomUUID().toString,
-          b => {
-            b.message { m =>
-              onMessage.complete(m).as(b.stop)
+    override def ask[A](f: Ref[A] => T, timeout: FiniteDuration): F[A] = {
+      Dispatcher.sequential[F].use { d =>
+        for {
+          onMessage <- Deferred[F, A]
+          ref = new Ref[A] {
+            def send(value: A): Unit = {
+              d.unsafeRunAndForget(
+                onMessage.complete(value)
+              )
             }
           }
-        )
-        _ <- send(f(ref))
-        result <- A
-          .race(A.sleep(timeout) >> A.pure(new Exception("Ask timeout")), onMessage.get)
-          .flatMap {
-            case Left(value) =>
-              A.raiseError[A](value)
-            case Right(value) =>
-              A.pure(value)
-          }
-      } yield result
+          _ <- send(f(ref))
+          result <- A
+            .race(A.sleep(timeout) >> A.pure(new Exception("Ask timeout")), onMessage.get)
+            .flatMap {
+              case Left(value) =>
+                A.raiseError[A](value)
+              case Right(value) =>
+                A.pure(value)
+            }
+        } yield result
+      }
     }
 
     override def send(msg: T): F[Unit] = {
