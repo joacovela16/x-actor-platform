@@ -1,16 +1,14 @@
 package xplat.extensions.persistence.journal.sqlite
 
 import cats.Monad
-import scalasql.Table
-import scalasql.core.{Config, DbClient}
+import cats.effect.kernel.Async
+import doobie.hikari.HikariTransactor
 import xplat.core.persistence.api.Journal
 import xplat.core.persistence.api.journal.{JournalEvent, JournalSnapshot}
-import scalasql._
-import scalasql.SqliteDialect._
-import scalasql.query.InsertColumns
 import xplat.extensions.persistence.journal.sqlite.SqliteJournal.{JournalEventSource, JournalSnapshotSource}
 
-final case class SqliteJournal[F[_]]()(implicit A: Monad[F]) extends Journal[F] {
+final case class SqliteJournal[F[_]]()(implicit A: Async[F]) extends Journal[F] {
+
 
   private val dbClient = new DbClient.Connection(
     java.sql.DriverManager
@@ -34,23 +32,23 @@ final case class SqliteJournal[F[_]]()(implicit A: Monad[F]) extends Journal[F] 
     db.run(query)
   }
 
-  override def getEvents(shard: Journal.Shard): F[LazyList[JournalEvent]] = A.pure {
+  override def getEvents(shard: Journal.Shard): F[fs2.Stream[F, JournalEvent]] = A.pure {
+    val b = LazyList.newBuilder[Int]
+
     db.stream(
       JournalSnapshotSource.select
         .filter(x => x.id === shard.id && x.shard === shard.name)
         .join(JournalEventSource)((state, event) => state.id === event.id && event.offset > state.snapshotOffset)
         .map(_._2)
-    ).toList
-      .to(LazyList)
-      .map(x =>
-        JournalEvent(
-          shard = x.shard,
-          id = x.id,
-          offset = x.offset,
-          timestamp = x.timestamp,
-          data = x.data
-        )
+    ).map(x =>
+      JournalEvent(
+        shard = x.shard,
+        id = x.id,
+        offset = x.offset,
+        timestamp = x.timestamp,
+        data = x.data
       )
+    )
   }
 
   override def getSnapshot(shard: Journal.Shard): F[Option[JournalSnapshot]] = ???

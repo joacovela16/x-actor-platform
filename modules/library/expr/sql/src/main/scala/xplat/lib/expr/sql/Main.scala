@@ -16,14 +16,21 @@ object Main extends SQLiteDialect {
     val q1 = Person.select
       .filter(x => x.name === "pepe")
 
-    val q2 = for {
-      s1 <- Person.select
-      s2 <- Person.select.map(x => x.age) if s1.age === s2
-      s3 <- City.select.join(x => s2 === x.amount)
-    } yield s3
+    val q2 = Person.select
+      .flatMap { s1 =>
+        Person.select
+          .map(x => x.age)
+          .withFilter(s2 => s1.age === s2)
+          .flatMap { s2 =>
+            City.select
+              .join(x => s2 === x.amount)
+              .map(s3 => s3)
+          }
+      }
 
     pprint.pprintln(
-      Person.select.join(City)((a, b) => a.city === b.name).ast
+       Person.select.join(City)((a, b) => a.city === b.name).ast
+      //q2.ast
     )
 
 //    pprint.pprintln(q1.ast)

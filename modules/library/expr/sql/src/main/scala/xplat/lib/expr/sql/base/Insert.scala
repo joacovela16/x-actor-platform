@@ -13,7 +13,6 @@ object Insert {
   trait SetCommand {
     type T
     def value: Expr[T]
-//    def typeMapper: TypeMapper[T]
     def ast: Ast
   }
 
@@ -32,7 +31,7 @@ object Insert {
   trait InsertEnabled {
 
     implicit class InsertInit[M[_[_]]](table: Table[M]) {
-      def insert: Insert[M[Expr], M[Commons.Id]] = Insert(table.query)
+      def insert: Insert[M[Expr], M[Commons.Id]] = Insert(table.selfContainer)
     }
 
   }
@@ -54,9 +53,9 @@ object Insert {
         Insert[Q, R](
           query = new Query.MatQuery[Q, R] {
             override def value: Q = query.value
-            override def ast: Ast = Ast.Apply("insert", query.ast, items)
-            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
-            override def getAST(q: Q): Ast = Ast.Apply("insert", query.getAST(q), items)
+            override def static: Ast = Ast.Apply("insert", query.static, items)
+//            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
+            override def dynamic(q: Q): Ast = Ast.Apply("insert", query.dynamic(q), items)
           }
         )
       }

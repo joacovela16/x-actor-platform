@@ -4,8 +4,8 @@ sealed trait Ast {}
 
 object Ast {
   case object Empty extends Ast
-  final case class Entity(tpe: Type.Clazz) extends Ast
-  final case class FieldAccess(entity: String, field: String, index: Int) extends Ast
+  final case class Entity(id:String, tpe: Type.Clazz) extends Ast
+  final case class FieldAccess(entity: String, field: String, index: Int, id: String) extends Ast
   final case class BinaryOperation(left: Ast, operation: Operation, right: Ast) extends Ast
   final case class UnaryOperation(operation: Operation, ast: Ast) extends Ast
   final case class Apply(name: String, over: Ast, body: Ast = Ast.Empty) extends Ast

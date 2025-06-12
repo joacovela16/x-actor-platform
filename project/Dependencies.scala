@@ -3,26 +3,26 @@ import sbt.*
 object Dependencies {
 
   object Versions {
-    val scalaVersion = "2.13.15"
+    val scalaVersion: String = "2.13.16"
 
-    val quicklens: String = "1.9.9"
+    val quicklens: String = "1.9.12"
     val chill: String = "0.10.0"
 
-    val circe: String = "0.14.10"
+    val circe: String = "0.14.13"
     val config: String = "1.4.2"
     val ficusversion: String = "1.5.2"
 
-    val logbackClassic: String = "1.5.12"
+    val logbackClassic: String = "1.5.18"
     val scalaLogging: String = "3.9.5"
 
-    val catsEffects: String = "3.5.5"
-    val cats: String = "2.12.0"
-    val catsFS2: String = "3.11.0"
+    val catsEffects: String = "3.6.1"
+    val cats: String = "2.13.0"
+    val catsFS2: String = "3.12.0"
     val catsLogger: String = "2.7.0"
     val catsMtl: String = "1.5.0"
 
     val quill: String = "4.8.0"
-    val sqliteDriver: String = "3.47.0.0"
+    val sqliteDriver: String = "3.49.1.0"
     val mysqlDriver: String = "8.0.33"
     val h2Driver: String = "2.3.232"
 
@@ -30,9 +30,11 @@ object Dependencies {
     val slf4j: String = "2.0.9"
 
     val scalaTest: String = "3.2.19"
-    val catTest: String = "1.5.0"
+    val catTest: String = "1.6.0"
     val pprint: String = "0.9.0"
-    val sourcecode = "0.4.2"
+    val sourcecode: String = "0.4.2"
+
+    val doobie: String = "1.0.0-RC9"
 
   }
 
@@ -53,6 +55,9 @@ object Dependencies {
     val quicklens = "com.softwaremill.quicklens" %% "quicklens" % Versions.quicklens
     val sourcecode = "com.lihaoyi" %% "sourcecode" % Versions.sourcecode
 
+    // database
+    val doobieCore = "org.tpolecat" %% "doobie-core" % Versions.doobie
+    val doobieHikari = "org.tpolecat" %% "doobie-hikari" % Versions.doobie // HikariCP transactor.
     val sqliteDriver = "org.xerial" % "sqlite-jdbc" % Versions.sqliteDriver
     val mysqlDriver = "mysql" % "mysql-connector-java" % Versions.mysqlDriver
     val h2Driver = "com.h2database" % "h2" % Versions.h2Driver

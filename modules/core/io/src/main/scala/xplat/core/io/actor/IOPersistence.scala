@@ -5,7 +5,7 @@ import cats.implicits._
 import xplat.core.api._
 import xplat.core.api.error.{CodecError, XError}
 import xplat.core.persistence.Persistence
-import xplat.core.persistence.api.journal.JournalEvent
+import xplat.core.persistence.api.journal.{JournalEvent, Shard}
 import xplat.core.persistence.api.{Effect, Effects, Journal, JournalBuilder}
 
 import scala.concurrent.duration.FiniteDuration
@@ -13,7 +13,7 @@ import scala.concurrent.duration.FiniteDuration
 object IOPersistence {
   private type Mapper[From] = Codec[From, Array[Byte]]
 
-  implicit def IOPersistence[F[_]](implicit M: Async[F], journalBuilder: JournalBuilder[F]): Persistence[F] = new Persistence[F] {
+  implicit def mkIOPersistence[F[_]](implicit M: Async[F], journalBuilder: JournalBuilder[F]): Persistence[F] = new Persistence[F] {
 
     override def build[State, Command, Event](
         name: String,
@@ -23,7 +23,7 @@ object IOPersistence {
         config: Persistence.Config
     )(implicit stateCodec: Mapper[State], eventCodec: Mapper[Event]): Behaviors[F, Command] => Behavior[F, Command] = { b =>
       b.context { ctx =>
-        val shard: Journal.Shard = Journal.Shard(name, ctx.name)
+        val shard: Shard = Shard(name, ctx.name)
 
         def parsingResult[T](result: Either[CodecError, T]): F[T] = {
           result match {
@@ -109,6 +109,15 @@ object IOPersistence {
             }
           }
 
+          def foldStream(entries: fs2.Stream[F, JournalEvent], state: State): F[State] = {
+            entries
+              .evalFold(state) { case (currentState, event) =>
+                parsingResult(eventCodec.decode(event.data)).map(value => eventHandler(currentState, value))
+              }
+              .compile
+              .lastOrError
+          }
+
           for {
             journal <- journalBuilder.build()
             _ <- journal.create(shard)
@@ -116,7 +125,7 @@ object IOPersistence {
             maybeState = eventualState.flatMap(_.data).map(x => parsingResult(stateCodec.decode(x)))
             entries <- journal.getEvents(shard)
             initialState <- maybeState.getOrElse(M.pure(initialState))
-            currentState <- fold(entries, initialState)
+            currentState <- foldStream(entries, initialState)
           } yield {
             b
               .stash(0)(stash => daemon(currentState, stash, journal))

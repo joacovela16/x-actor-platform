@@ -3,6 +3,7 @@ package xplat.core.api
 import cats.Monad
 
 import scala.annotation.unused
+import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 sealed trait Behavior[F[_], T] {
@@ -18,6 +19,8 @@ object Behavior {
   final case class Same[F[_], T]() extends Behavior[F, T]
   final case class Stop[F[_], T]() extends Behavior[F, T]
   final case class Wrapper[F[_], T](effect: F[Behavior[F, T]]) extends Behavior[F, T]
+  final case class Stasher[F[_], T](size: Int, f: Stash[F, T] => Behavior[F, T]) extends Behavior[F, T]
+  final case class Timer[F[_], T](time: FiniteDuration, message: T, f: Cancelable[F] => Behavior[F, T]) extends Behavior[F, T]
 
   implicit def wrap[F[_], T](b: F[Behavior[F, T]]): Behavior[F, T] = Behavior.Wrapper(b)
   implicit def asSame[F[_], T](b: F[Unit])(implicit M: Monad[F]): Behavior[F, T] = Behavior.Wrapper(b.as(Behavior.Same()))

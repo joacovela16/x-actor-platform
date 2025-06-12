@@ -19,7 +19,7 @@ import cats.effect.std.Dispatcher
 
 final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(implicit A: Async[F]) extends ActorSystem[F] {
 
-  override def spawn[T](name: String)(builder: Behaviors[F, T] => Behavior[F, T]): F[ActorRef[F, T]] = {
+  override def spawn[T](name: String)(builder: BehaviorBuilder[F, T]): F[ActorRef[F, T]] = {
     context.spawn(name)(builder)
   }
 
@@ -43,7 +43,7 @@ object IOActorSystem {
         for {
           root <- Actor[F, Nothing](
             name = name,
-            behavior = IOBehaviors[F, Nothing]().same,
+            behavior = Behaviors[F, Nothing]().same,
             parentPath = Seq("xplat"),
             notifyShutdown = A.unit,
             supervisor = supervisor
@@ -81,16 +81,7 @@ object IOActorSystem {
     def children: Map[String, Link[F]]
     def reduce(command: Command[F, T]): F[State[F, T]]
 
-    def withBehavior(behavior: Behavior[F, T])(implicit A: Async[F]): State[F, T] = {
-      this match {
-        case item: State.Init[F, T] =>
-          item.modify(_.behavior).setTo(behavior)
-        case item: State.Running[F, T] =>
-          item.modify(_.behavior).setTo(behavior)
-        case item: State.Terminated[F, T] =>
-          item.modify(_.behavior).setTo(behavior)
-      }
-    }
+    def withBehavior(behavior: Behavior[F, T]): State[F, T]
 
     def withSignalHandler(sg: PartialFunction[Signal, Behavior[F, T]])(implicit A: Async[F]): State[F, T] = {
       this match {
@@ -112,6 +103,18 @@ object IOActorSystem {
 
     private def fold[F[_], T](state: State[F, T], behavior: Behavior[F, T])(implicit A: Async[F]): F[State[F, T]] = {
       behavior match {
+        case Behavior.Timer(time, message, f) =>
+          A.delay(
+            state.withBehavior(
+              Behavior.OnContext[F, T](c => c.schedule(c.pipe(message), time).map(f))
+            )
+          )
+        case Behavior.Stasher(size, f) =>
+          A.delay(
+            state.withBehavior(
+              Behavior.OnContext[F, T](c => IOStash[F, T](c, size).map(x => f(x)))
+            )
+          )
         case Behavior.Wrapper(effect) =>
           handleError[F, Behavior[F, T], T](
             effect,
@@ -176,6 +179,8 @@ object IOActorSystem {
       }
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = A.pure(this)
+
+      override def withBehavior(behavior: Behavior[F, T]): State[F, T] = this.modify(_.behavior).setTo(behavior)
     }
 
     private final case class Running[F[_], T](
@@ -188,6 +193,8 @@ object IOActorSystem {
         extends State[F, T] {
 
       def setup(): F[State[F, T]] = A.pure(this)
+
+      override def withBehavior(behavior: Behavior[F, T]): State[F, T] = this.modify(_.behavior).setTo(behavior)
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
@@ -219,7 +226,7 @@ object IOActorSystem {
 
       private def onSignal(signal: Signal, state: State[F, T], behavior: Behavior[F, T]): F[State[F, T]] = {
         behavior match {
-          case OnContext(f) =>
+          case Behavior.OnContext(f) =>
             handleError[F, Behavior[F, T], T](
               A.delay(f(state.context)),
               state,
@@ -227,9 +234,9 @@ object IOActorSystem {
             )
           case Behavior.Stop() =>
             Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
-          case Same() =>
+          case Behavior.Same() =>
             state.pure[F]
-          case Wrapper(effect) =>
+          case Behavior.Wrapper(effect) =>
             handleError[F, Behavior[F, T], T](
               effect,
               state,
@@ -247,6 +254,10 @@ object IOActorSystem {
             } else {
               fold(state.withSignalHandler(f), nested)
             }
+          case item: Behavior.Timer[F, T] =>
+            fold(state, item) >>= (s => onSignal(signal, s, s.behavior))
+          case item: Behavior.Stasher[F, T] =>
+            fold(state, item) >>= (s => onSignal(signal, s, s.behavior))
         }
       }
 
@@ -276,6 +287,10 @@ object IOActorSystem {
               state,
               b => onMessage(message, state, b)
             )
+          case item: Behavior.Timer[F, T] =>
+            fold(state, item) >>= (x => onMessage(message, x, x.behavior))
+          case item: Behavior.Stasher[F, T] =>
+            fold(state, item) >>= (x => onMessage(message, x, x.behavior))
           case _ =>
             A.pure(state)
         }
@@ -291,6 +306,8 @@ object IOActorSystem {
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
+
+      override def withBehavior(behavior: Behavior[F, T]): State[F, T] = this.modify(_.behavior).setTo(behavior)
 
       def setup(): F[State[F, T]] = {
         if (children.isEmpty) {
@@ -346,7 +363,7 @@ object IOActorSystem {
 
   private object IOStash {
 
-    def apply[F[_]: Async, T](context: Context[F, T], size: Int): F[Stash[F, T]] = {
+    def apply[F[_], T](context: Context[F, T], size: Int)(implicit A:Async[F]): F[Stash[F, T]] = {
       if (size == 0) {
         Queue.unbounded[F, T].map(q => IOStash(q, context))
       } else {
@@ -356,23 +373,11 @@ object IOActorSystem {
 
   }
 
-  private final case class IOBehaviors[F[_], T]()(implicit A: Async[F]) extends Behaviors[F, T] {
-
-    override def stash(size: Int)(f: Stash[F, T] => Behavior[F, T]): Behavior[F, T] = {
-      context(c => IOStash[F, T](c, size) map (x => f(x)))
-    }
-
-    override def timer(time: FiniteDuration, message: T)(f: Cancelable[F] => Behavior[F, T]): Behavior[F, T] = {
-      context(c => c.schedule(c.pipe(message), time) map f)
-    }
-
-  }
-
-  final case class IOContext[F[_], T](private val actor: Actor[F, T], log: Logger[F])(implicit A: Async[F]) extends Context[F, T] {
+  private final case class IOContext[F[_], T](private val actor: Actor[F, T], log: Logger[F])(implicit A: Async[F]) extends Context[F, T] {
     override def name: String = actor.name
     override def path: String = actor.path
     override def self: ActorRef[F, T] = actor
-    override def spawn[A](name: String)(b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = actor.spawn(name, b)
+    override def spawn[A](name: String)(b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = actor.spawn[A](name, b)
     override def pipe(msg: T): F[Unit] = actor.send(msg)
     override def signal(signal: Signal): F[Unit] = actor.signal(signal)
     override def stopChild(name: String): F[Unit] = actor.stopChild(name)
@@ -411,7 +416,7 @@ object IOActorSystem {
 
     def stop(): F[Unit] = push(Command.Stop())
 
-    def spawn[A](name: String, b: Behaviors[F, A] => Behavior[F, A]): F[ActorRef[F, A]] = {
+    def spawn[A](name: String, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
       Async[F].async { resolve =>
         for {
           onBuild <- Deferred[F, Actor[F, A]]
@@ -421,7 +426,7 @@ object IOActorSystem {
               name,
               Actor[F, A](
                 name = name,
-                behavior = b(IOBehaviors()),
+                behavior = b(Behaviors[F, A]()),
                 parentPath = parentPath :+ self.name,
                 notifyShutdown = push(Command.ChildDown(name)),
                 supervisor = supervisor

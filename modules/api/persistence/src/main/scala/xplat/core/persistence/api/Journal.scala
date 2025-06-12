@@ -1,30 +1,26 @@
 package xplat.core.persistence.api
 
-import xplat.core.persistence.api.journal.{JournalEvent, JournalSnapshot}
+import xplat.core.persistence.api.journal.{JournalEvent, JournalSnapshot, Shard}
 
 trait Journal[F[_]] {
 
-  def create(shard: Journal.Shard): F[Unit]
+  def create(shard: Shard): F[Unit]
 
-  def getEvents(shard: Journal.Shard): F[LazyList[JournalEvent]]
+  def getEvents(shard: Shard): F[fs2.Stream[F, JournalEvent]]
 
-  def getSnapshot(shard: Journal.Shard): F[Option[JournalSnapshot]]
+  def getSnapshot(shard: Shard): F[Option[JournalSnapshot]]
 
-  def writeSnapshot(shard: Journal.Shard, data: Array[Byte]): F[Unit]
+  def writeSnapshot(shard: Shard, data: Array[Byte]): F[Unit]
+/*
+  def deleteEventsByRange(shard: Shard, from: Long, to: Long): F[Unit]
 
-  def getEventsByRange(shard: Journal.Shard, from: Long, to: Long): F[LazyList[JournalEvent]]
+  def getOffset(shard: Shard): F[Long]*/
 
-  def deleteEventsByRange(shard: Journal.Shard, from: Long, to: Long): F[Unit]
-
-  def getOffset(shard: Journal.Shard): F[Long]
-
-  def writeEvents(shard: Journal.Shard, entries: Seq[Array[Byte]]): F[Unit]
+  def writeEvents(shard: Shard, entries: Seq[Array[Byte]]): F[Unit]
 
   def close(): F[Unit]
 }
 
 object Journal {
 
-  /** represents a namespace "name" containing "id" */
-  final case class Shard(name: String, id: String)
 }

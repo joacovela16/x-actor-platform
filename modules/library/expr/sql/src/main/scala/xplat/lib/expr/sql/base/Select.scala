@@ -2,14 +2,16 @@ package xplat.lib.expr.sql.base
 
 import xplat.lib.expr.core._
 
-final case class Select[Q, R](query: Query.Aux[Q, R]) extends QueryProvider[Q]
+final case class Select[Q, R](query: Query.Aux[Q, R]) extends QueryProvider[Q] {
+//  def query =
+}
 
 object Select {
 
   trait Operations {
 
     implicit class TablePredef[M[_[_]]](table: Table[M]) {
-      def select: Select[M[Expr], M[Commons.Id]] = Select(table.query)
+      def select: Select[M[Expr], M[Commons.Id]] = Select(table.query())
     }
 
   }
@@ -28,9 +30,9 @@ object Select {
           query = new Query.MatQuery[Q, R] {
             self =>
             override def value: Q = query.value
-            override def ast: Ast = Ast.Apply("filter", query.ast, localExpr.ast)
-            override def getAST(q: Q): Ast = Ast.Apply("filter", query.getAST(q), localExpr.ast)
-            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
+            override def static: Ast = Ast.Apply("filter", query.static, localExpr.ast)
+            override def dynamic(q: Q): Ast = Ast.Apply("filter", query.dynamic(q), localExpr.ast)
+//            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
           }
         )
       }
@@ -49,9 +51,9 @@ object Select {
           query = new Query.MatQuery[Q1, otherQuery.R] {
             self =>
             override def value: Q1 = f(query.value)
-            override def constructFromAST(ast: Ast): Q1 = otherQuery.constructFromAST(ast)
-            override def getAST(q: Q1): Ast = otherQuery.getAST(q)
-            override def ast: Ast = Ast.Apply("map", query.ast, otherQuery.getAST(self.value))
+//            override def constructFromAST(ast: Ast): Q1 = otherQuery.constructFromAST(ast)
+            override def dynamic(q: Q1): Ast = otherQuery.dynamic(q)
+            override def static: Ast = Ast.Apply(name = "map", over = query.static, body = otherQuery.dynamic(self.value))
           }
         )
       }
@@ -75,11 +77,11 @@ object Select {
 
             override def value: Q1 = otherQuery.value
 
-            override def ast: Ast = Ast.Apply("flatMap", query.ast, otherQuery.ast)
+            override def static: Ast = Ast.Apply("flatMap", query.static, otherQuery.static)
 
-            override def constructFromAST(ast: Ast): Q1 = otherQuery.constructFromAST(ast)
+//            override def constructFromAST(ast: Ast): Q1 = otherQuery.constructFromAST(ast)
 
-            override def getAST(q: Q1): Ast = otherQuery.getAST(q)
+            override def dynamic(q: Q1): Ast = otherQuery.dynamic(q)
           }
         )
       }
@@ -99,16 +101,17 @@ object Select {
         Select[Q, query.R](
           query = new Query.MatQuery[Q, query.R] {
             override def value: Q = query.value
-            override def ast: Ast = Ast.Apply("join", query.ast, localExpr.ast)
-            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
-            override def getAST(q: Q): Ast = Ast.Apply("join", query.getAST(q), localExpr.ast)
+            override def static: Ast = Ast.Apply("join", query.static, localExpr.ast)
+//            override def constructFromAST(ast: Ast): Q = query.constructFromAST(ast)
+            override def dynamic(q: Q): Ast = Ast.Apply("join", query.dynamic(q), localExpr.ast)
           }
         )
       }
 
       def join[G[_[_]]](other: Table[G])(f: (Q, G[Expr]) => Expr[Boolean]): Select[(Q, G[Expr]), (R0, G[Commons.Id])] = {
 
-        val g = other.selfContainer.value
+        val otherQuery = other.selfContainer
+        val g = otherQuery.value
         val expr = f(query.value, g)
 
         Select[(Q, G[Expr]), (R0, G[Commons.Id])](
@@ -116,15 +119,13 @@ object Select {
             self =>
             override def value: (Q, G[Expr]) = (query.value, g)
 
-            override def ast: Ast = Ast.Apply(
+            override def static: Ast = Ast.Apply(
               name = "join",
-              over = Ast.Tuple(query.ast, other.selfContainer.ast),
+              over = Ast.Tuple(query.static, otherQuery.static),
               body = expr.ast
             )
 
-            override def constructFromAST(ast: Ast): (Q, G[Expr]) = (query.constructFromAST(ast), other.selfContainer.constructFromAST(ast))
-
-            override def getAST(q: (Q, G[Expr])): Ast = self.ast
+            override def dynamic(q: (Q, G[Expr])): Ast = self.static
           }
         )
       }

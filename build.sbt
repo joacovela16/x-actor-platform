@@ -34,7 +34,11 @@ lazy val sqlLibCore = (project in file("./modules/library/expr/sql"))
   .dependsOn(exprLibCore)
   .settings(
     name := "sql-lib-core",
-    commonsSettings
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.doobieCore,
+      Dependencies.Compile.doobieHikari
+    )
   )
 
 lazy val coreAPI = (project in file("./modules/api/core"))
@@ -51,7 +55,10 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
   .dependsOn(coreAPI)
   .settings(
     name := "core-persistence",
-    commonsSettings
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.catsFS2
+    )
   )
 
 lazy val ioActor = (project in file("./modules/core/io"))

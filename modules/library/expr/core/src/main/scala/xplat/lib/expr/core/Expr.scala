@@ -9,7 +9,6 @@ sealed trait Expr[T] {
 
 object Expr {
 
-
   final case class Binary[T](left: Ast, right: Ast, operation: Operation) extends Expr[T] {
     override def ast: Ast = Ast.BinaryOperation(left, operation, right)
   }
@@ -18,8 +17,14 @@ object Expr {
     override def ast: Ast = Ast.UnaryOperation(operation, expr.ast)
   }
 
-  final case class Access[T](name: String, entity: String, index: Int, mapper: TypeMapper[T]) extends Expr[T] {
-    override def ast: Ast = Ast.FieldAccess(entity, name, index)
+  final case class Access[T](
+                              name: String,
+                              entity: String,
+                              index: Int,
+                              mapper: TypeMapper[T],
+                              id: String
+                            ) extends Expr[T] {
+    override def ast: Ast = Ast.FieldAccess(entity, name, index, id)
   }
 
   final case class EString(value: String) extends Expr[String] {
