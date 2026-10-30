@@ -12,7 +12,7 @@ import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.InMemoryNetwork
 import xplat.core.io.sharding.IOClusterShardingTest._
 import xplat.core.persistence.Persistence
-import xplat.core.persistence.api.journal.{JournalEvent, JournalSnapshot, Shard}
+import xplat.core.persistence.api.journal.Shard
 import xplat.core.persistence.api.{Effect, Effects, Journal, JournalBuilder}
 import xplat.core.sharding.ClusterSharding
 import xplat.core.sharding.api._
@@ -22,18 +22,7 @@ import scala.concurrent.duration._
 
 class PersistentEntityTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
-  implicit private val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]
-
-  /** Journal shared by every node, standing in for a database. */
-  final class SharedJournal(events: CRef[IO, Map[Shard, Vector[Array[Byte]]]]) extends Journal[IO] {
-    def create(shard: Shard): IO[Unit] = IO.unit
-    def getEvents(shard: Shard): IO[fs2.Stream[IO, JournalEvent]] =
-      events.get.map(m => fs2.Stream.emits(m.getOrElse(shard, Vector.empty).zipWithIndex.map { case (d, i) => JournalEvent(shard.name, shard.id, i.toLong, 0L, d) }))
-    def getSnapshot(shard: Shard): IO[Option[JournalSnapshot]] = IO.pure(None)
-    def writeSnapshot(shard: Shard, data: Array[Byte]): IO[Unit] = IO.unit
-    def writeEvents(shard: Shard, entries: Seq[Array[Byte]]): IO[Unit] = events.update(m => m.updated(shard, m.getOrElse(shard, Vector.empty) ++ entries))
-    def close(): IO[Unit] = IO.unit
-  }
+  implicit private val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]()
 
   implicit private val intCodec: Codec[Int, Array[Byte]] = new Codec[Int, Array[Byte]] {
     def encode(from: Int): Either[CodecError, Array[Byte]] = Right(from.toString.getBytes(UTF_8))
@@ -56,6 +45,7 @@ class PersistentEntityTest extends AsyncFreeSpec with AsyncIOSpec with Matchers 
     val config = ShardingConfig(passivateIdleAfter = None, rebalanceInterval = 300.millis, retryInterval = 100.millis)
     (InMemoryNetwork[IO], CRef.of[IO, Map[Shard, Vector[Array[Byte]]]](Map.empty)).tupled.flatMap { case (network, store) =>
       val journal = new SharedJournal(store)
+      implicit val journals: JournalBuilder[IO] = journal.builder
       def sharded(port: Int): Resource[IO, (Node, ClusterSharding[IO])] =
         for {
           n <- node(network, port, List(address(1)))

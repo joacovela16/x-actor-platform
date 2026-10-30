@@ -12,9 +12,10 @@ import scala.concurrent.duration.FiniteDuration
 
 /** Decides where the shards of one entity type live. Runs as a cluster singleton.
   *
-  * Its state lives in memory only. When it moves to another node it starts empty and rebuilds the allocations from the
-  * regions, which report their shards every `retryInterval`; during the first two intervals it does not allocate new
-  * shards, so it does not place a shard that some region already hosts.
+  * Its allocations and remembered entities are kept in a [[CoordinatorStore]], so they survive the coordinator moving
+  * or the whole cluster restarting. Regions also report their shards every `retryInterval`, which corrects the stored
+  * view: during the first two intervals after starting it does not allocate new shards, and a stored allocation that its
+  * region does not report is treated as lost, so the shard is placed again and its remembered entities restart.
   */
 private[sharding] object Coordinator {
 
@@ -25,9 +26,12 @@ private[sharding] object Coordinator {
       rebalancing: Set[String],
       waiting: Map[String, Set[Address]],
       startedAt: FiniteDuration,
-      lastRebalance: FiniteDuration
+      lastRebalance: FiniteDuration,
+      reported: Map[Address, Set[String]],
+      allocatedAt: Map[String, FiniteDuration]
   ) {
     def shardsOf(region: Address): Set[String] = allocations.collect { case (s, r) if r == region => s }.toSet
+    def data: CoordinatorStore.Data = CoordinatorStore.Data(allocations, remembered)
   }
 
   def behavior[F[_]](
@@ -35,7 +39,8 @@ private[sharding] object Coordinator {
       config: ShardingConfig,
       strategy: ShardAllocationStrategy[F],
       regionEndpoint: String,
-      remember: Boolean
+      remember: Boolean,
+      store: CoordinatorStore[F]
   )(b: Behaviors[F, CoordinatorMsg])(implicit A: Async[F]): Behavior[F, CoordinatorMsg] = {
 
     def tell(region: Address, msg: RegionMsg): F[Unit] =
@@ -58,10 +63,10 @@ private[sharding] object Coordinator {
         if (candidates.isEmpty) A.pure(st.copy(waiting = st.waiting.updated(shard, st.waiting.getOrElse(shard, Set.empty) ++ requesters)))
         else {
           val requester = requesters.headOption.getOrElse(candidates.min)
-          strategy.allocate(requester, shard, candidates.map(a => a -> st.shardsOf(a)).toMap).flatMap { home =>
+          (strategy.allocate(requester, shard, candidates.map(a => a -> st.shardsOf(a)).toMap), Clock[F].monotonic).tupled.flatMap { case (home, now) =>
             val entities = if (remember) st.remembered.getOrElse(shard, Set.empty) else Set.empty[String]
             (requesters + home).toList.traverse_(r => tell(r, ShardHome(shard, home, if (r == home) entities else Set.empty))).as(
-              st.copy(allocations = st.allocations.updated(shard, home), waiting = st.waiting - shard)
+              st.copy(allocations = st.allocations.updated(shard, home), waiting = st.waiting - shard, allocatedAt = st.allocatedAt.updated(shard, now))
             )
           }
         }
@@ -76,7 +81,7 @@ private[sharding] object Coordinator {
     def handle(ctx: Context[F, CoordinatorMsg], st: State, msg: CoordinatorMsg): F[State] = msg match {
 
       case Register(region, shards) =>
-        shards.toList.foldM(st.copy(registered = st.registered + region)) { case (acc, (shard, entities)) =>
+        shards.toList.foldM(st.copy(registered = st.registered + region, reported = st.reported.updated(region, shards.keySet))) { case (acc, (shard, entities)) =>
           acc.allocations.get(shard) match {
             case None => A.pure(acc.copy(allocations = acc.allocations.updated(shard, region), remembered = acc.remembered.updated(shard, entities)))
             case Some(home) if home == region => A.pure(acc.copy(remembered = acc.remembered.updated(shard, entities)))
@@ -115,7 +120,11 @@ private[sharding] object Coordinator {
 
       case RegionStopped(region) =>
         val lost = st.shardsOf(region)
-        reallocateRemembered(st.copy(registered = st.registered - region, allocations = st.allocations -- lost, rebalancing = st.rebalancing -- lost), lost, Set(region))
+        reallocateRemembered(
+          st.copy(registered = st.registered - region, reported = st.reported - region, allocations = st.allocations -- lost, rebalancing = st.rebalancing -- lost),
+          lost,
+          Set(region)
+        )
 
       case Tick =>
         for {
@@ -129,7 +138,21 @@ private[sharding] object Coordinator {
             rebalancing = st.rebalancing -- deadShards,
             registered = st.registered.filter(alive(s, _))
           )
-          afterDead <- reallocateRemembered(cleaned, deadShards, Set.empty)
+          afterDead0 <- reallocateRemembered(cleaned, deadShards, Set.empty)
+          // Allocations its live region does not report (e.g. loaded from the store after a restart) are lost shards.
+          settled = config.retryInterval * 3
+          orphans = afterDead0.allocations.collect {
+            case (shard, home)
+                if now - afterDead0.startedAt >= settled && !afterDead0.rebalancing(shard) &&
+                  afterDead0.reported.get(home).exists(!_.contains(shard)) && afterDead0.allocatedAt.get(shard).forall(now - _ >= settled) =>
+              shard
+          }.toSet
+          afterOrphans <- reallocateRemembered(afterDead0.copy(allocations = afterDead0.allocations -- orphans), orphans, Set.empty)
+          // Remembered entities whose shard has no home (e.g. after the whole cluster restarted) start again.
+          unplaced = afterOrphans.remembered.collect {
+            case (shard, ids) if ids.nonEmpty && !afterOrphans.allocations.contains(shard) && !afterOrphans.rebalancing(shard) => shard
+          }
+          afterDead <- if (now - afterOrphans.startedAt >= settled) reallocateRemembered(afterOrphans, unplaced, Set.empty) else A.pure(afterOrphans)
           // Shards of regions on leaving nodes move away before the node goes.
           leavingShards = afterDead.allocations.collect {
             case (shard, home) if !afterDead.rebalancing(shard) && s.get(home).exists(x => x._1 == MemberStatus.Leaving || x._1 == MemberStatus.Exiting) => shard -> home
@@ -150,13 +173,17 @@ private[sharding] object Coordinator {
     }
 
     def running(ctx: Context[F, CoordinatorMsg], st: State): Behavior[F, CoordinatorMsg] =
-      b.message(msg => handle(ctx, st, msg).map(next => running(ctx, next)))
+      b.message(msg => handle(ctx, st, msg).flatTap(next => store.save(st.data, next.data)).map(next => running(ctx, next)))
 
     b.context { ctx =>
       for {
-        now <- Clock[F].monotonic
-        _   <- ctx.schedule(ctx.pipe(Tick), config.retryInterval)
-      } yield running(ctx, State(Map.empty, Map.empty, Set.empty, Set.empty, Map.empty, now, now))
+        now  <- Clock[F].monotonic
+        data <- store.load
+        _    <- ctx.schedule(ctx.pipe(Tick), config.retryInterval)
+      } yield running(
+        ctx,
+        State(data.allocations, data.remembered, Set.empty, Set.empty, Map.empty, now, now, Map.empty, data.allocations.map { case (s, _) => s -> now })
+      )
     }
   }
 }

@@ -1,8 +1,8 @@
 package xplat.core.sharding
 
 import cats.effect.Resource
-import xplat.core.api.ActorRef
 import xplat.core.cluster.Cluster
+import xplat.core.cluster.api.ClusterRef
 import xplat.core.sharding.api._
 
 /** Spreads entities (actors identified by a type and an id) over the cluster, so each entity runs on exactly one node
@@ -24,9 +24,10 @@ import xplat.core.sharding.api._
 trait ClusterSharding[F[_]] {
 
   /** Starts the shard region for this entity type on the local node. Call it on every node that sends to or hosts these
-    * entities. The returned ref accepts envelopes for any entity; calling `init` again returns the same ref.
+    * entities. The returned ref accepts envelopes for any entity, also with `ask`; calling `init` again returns the same
+    * ref.
     */
-  def init[T](entity: Entity[F, T]): F[ActorRef[F, ShardingEnvelope[T]]]
+  def init[T](entity: Entity[F, T]): F[ClusterRef[F, ShardingEnvelope[T]]]
 
   /** Reference to one entity. It is cheap and can be created per message. Sending fails with
     * [[api.error.EntityTypeNotInitialized]] if `init` was not called for this type on the local node.

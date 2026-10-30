@@ -7,7 +7,8 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api.{ActorRef, Codec, Ref => ReplyTo}
 import xplat.core.cluster.ClusterSingleton
-import xplat.core.cluster.api.{SingletonActor, SingletonConfig}
+import xplat.core.cluster.api.{ClusterRef, SingletonActor, SingletonConfig}
+import xplat.core.persistence.api.JournalBuilder
 import xplat.core.io.cluster.internal.Asks
 import xplat.core.io.cluster.{IOCluster, IOClusterSingleton}
 import xplat.core.io.sharding.ShardingProtocol._
@@ -23,6 +24,7 @@ import scala.concurrent.duration.FiniteDuration
 final class IOClusterSharding[F[_]] private (
     cluster: IOCluster[F],
     singletons: ClusterSingleton[F],
+    journals: Option[JournalBuilder[F]],
     regions: Ref[F, Map[String, Deferred[F, Region[F, _]]]],
     supervisor: Supervisor[F],
     log: Log4Cats[F]
@@ -31,7 +33,7 @@ final class IOClusterSharding[F[_]] private (
 
   private val asks = new Asks[F](cluster.remoting, cluster.refResolver)
 
-  def init[T](entity: Entity[F, T]): F[ActorRef[F, ShardingEnvelope[T]]] =
+  def init[T](entity: Entity[F, T]): F[ClusterRef[F, ShardingEnvelope[T]]] =
     Deferred[F, Region[F, _]].flatMap { fresh =>
       regions.modify { current =>
         current.get(entity.typeKey.name) match {
@@ -43,13 +45,15 @@ final class IOClusterSharding[F[_]] private (
 
   private def create[T](entity: Entity[F, T]): F[Region[F, T]] = {
     val config = entity.config
-    val coordinator = SingletonActor[F, CoordinatorMsg](
-      s"sharding-coordinator-${entity.typeKey.name}",
-      b => Coordinator.behavior[F](cluster, config, entity.allocationStrategy.getOrElse(new LeastShardAllocationStrategy[F]()), Region.endpoint(entity.typeKey.name), config.rememberEntities)(b),
+    val typeName = entity.typeKey.name
+    def coordinator(store: CoordinatorStore[F]) = SingletonActor[F, CoordinatorMsg](
+      s"sharding-coordinator-$typeName",
+      b => Coordinator.behavior[F](cluster, config, entity.allocationStrategy.getOrElse(new LeastShardAllocationStrategy[F]()), Region.endpoint(typeName), config.rememberEntities, store)(b),
       SingletonConfig(role = config.role, handOverRetryInterval = config.retryInterval)
     )(coordinatorCodec)
     for {
-      proxy  <- singletons.init(coordinator)
+      store  <- journals.fold(A.pure(CoordinatorStore.inMemory[F]))(CoordinatorStore.journaled[F](_, typeName))
+      proxy  <- singletons.init(coordinator(store))
       region <- Region[F, T](cluster, entity, proxy, supervisor, log)
       _      <- region.start
     } yield region
@@ -66,15 +70,13 @@ final class IOClusterSharding[F[_]] private (
 
   def regionState[T](typeKey: EntityTypeKey[T]): F[ShardRegionState] = region(typeKey).flatMap(_.state)
 
-  /** Ref that accepts envelopes for any entity of the type. Replies need a codec, so use `entityRefFor(...).ask`. */
-  private def envelopeRef[T](typeKey: EntityTypeKey[T], region: Region[F, T]): ActorRef[F, ShardingEnvelope[T]] =
-    new ActorRef[F, ShardingEnvelope[T]] {
-      val name: String = s"${typeKey.name}-region"
+  /** Ref that accepts envelopes for any entity of the type. */
+  private def envelopeRef[T](typeKey: EntityTypeKey[T], region: Region[F, T]): ClusterRef[F, ShardingEnvelope[T]] =
+    new ClusterRef[F, ShardingEnvelope[T]] {
       val path: String = s"sharding://${typeKey.name}"
       def send(msg: ShardingEnvelope[T]): F[Unit] = region.deliver(msg.entityId, msg.message)
-      def ask[B](f: ReplyTo[B] => ShardingEnvelope[T], timeout: FiniteDuration): F[B] =
-        A.raiseError(new UnsupportedOperationException("the shard region cannot carry replies; use entityRefFor(...).ask"))
-      def terminated: F[Unit] = A.never
+      def ask[B](f: ReplyTo[B] => ShardingEnvelope[T], timeout: FiniteDuration)(implicit codec: Codec[B, Array[Byte]]): F[B] =
+        asks.ask[ShardingEnvelope[T], B](send, f, timeout)
     }
 
   private def stopAll: F[Unit] =
@@ -85,8 +87,12 @@ object IOClusterSharding {
 
   /** Builder for `ClusterSharding(cluster)`. The cluster must be an [[IOCluster]]. Releasing it hands off the local
     * shards to other nodes.
+    *
+    * @param journals
+    *   where coordinators keep their state (allocations and remembered entities). Without it the state lives in memory
+    *   and is rebuilt from the regions, so remembered entities are lost if the whole cluster stops.
     */
-  def builder[F[_]](implicit A: Async[F]): ClusterShardingBuilder[F] =
+  def builder[F[_]](journals: Option[JournalBuilder[F]] = None)(implicit A: Async[F]): ClusterShardingBuilder[F] =
     cluster =>
       for {
         io         <- Resource.eval(IOCluster.unwrap(cluster))
@@ -94,7 +100,7 @@ object IOClusterSharding {
         singletons <- IOClusterSingleton.builder[F].build(cluster)
         supervisor <- Supervisor[F](await = false)
         regions    <- Resource.eval(Ref.of[F, Map[String, Deferred[F, Region[F, _]]]](Map.empty))
-        sharding = new IOClusterSharding[F](io, singletons, regions, supervisor, log)
+        sharding = new IOClusterSharding[F](io, singletons, journals, regions, supervisor, log)
         _ <- Resource.onFinalize(sharding.stopAll)
       } yield sharding
 }

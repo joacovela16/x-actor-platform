@@ -23,11 +23,9 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
   import IOClusterShardingTest._
 
   private val Timeout = 40.seconds
-  implicit private val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]
+  implicit private val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]()
 
   private val fastSharding = ShardingConfig(passivateIdleAfter = None, rebalanceInterval = 300.millis, retryInterval = 100.millis, handOffTimeout = 2.seconds)
-
-  final case class ShardedNode(node: Node, sharding: ClusterSharding[IO])
 
   private def sharded(
       network: InMemoryNetwork[IO],
@@ -96,6 +94,43 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
           reply  <- eventually(get(n.sharding, "env"))(_ == "1:1")
         } yield reply shouldBe "1:1"
       }
+    }.timeout(Timeout)
+  }
+
+  "the region ref also carries asks" in {
+    InMemoryNetwork[IO].flatMap { network =>
+      sharded(network, 1).use { n =>
+        for {
+          _      <- n.node.cluster.awaitUp
+          region <- n.sharding.init(counter(1, n.node.cluster.refResolver, fastSharding))
+          _      <- region ! ShardingEnvelope("asked", Inc)
+          reply  <- eventually(region.ask[String](r => ShardingEnvelope("asked", Get(r)), 1.second)(stringCodec).attempt)(_ == Right("1:1"))
+        } yield reply shouldBe Right("1:1")
+      }
+    }.timeout(Timeout)
+  }
+
+  "with a durable coordinator, remembered entities restart after the whole cluster restarts" in {
+    val remembering = fastSharding.copy(rememberEntities = true)
+    (InMemoryNetwork[IO], SharedJournal()).tupled.flatMap { case (network, journal) =>
+      val durable: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO](Some(journal.builder))
+      def durableNode(port: Int): Resource[IO, ShardedNode] =
+        for {
+          n <- node(network, port, List(address(1)))
+          s <- ClusterSharding[IO](n.cluster)(durable)
+          _ <- Resource.eval(s.init(counter(n.address.port, n.cluster.refResolver, remembering)))
+        } yield ShardedNode(n, s)
+
+      val ids = (1 to 10).map(i => s"d-$i").toSet
+      for {
+        _ <- List(1, 2).traverse(durableNode).use { nodes =>
+          allUp(nodes.map(_.node)) >> ids.toList.traverse_(id => get(nodes.head.sharding, id)) >>
+            eventually(hostedIds(nodes))(_.values.flatten.toSet == ids) >> IO.sleep(500.millis) // let the regions report them
+        }
+        restarted <- List(1, 2).traverse(durableNode).use { nodes =>
+          allUp(nodes.map(_.node)) >> eventually(hostedIds(nodes))(_.values.flatten.toSet == ids)
+        }
+      } yield restarted.values.flatten.toSet shouldBe ids
     }.timeout(Timeout)
   }
 
@@ -214,6 +249,8 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
 }
 
 object IOClusterShardingTest {
+
+  final case class ShardedNode(node: Node, sharding: ClusterSharding[IO])
 
   sealed trait Cmd
   case object Inc extends Cmd
