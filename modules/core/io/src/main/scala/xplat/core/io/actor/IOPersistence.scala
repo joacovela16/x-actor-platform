@@ -74,7 +74,7 @@ object IOPersistence {
           b.context { ctx =>
             for {
               cancellable <- ctx.schedule(
-                M.pure(ctx.signal(Signal.Kill)) >> ctx.log.debug(
+                ctx.signal(Signal.Kill) >> ctx.log.debug(
                   s"Shutting down persistence actor " +
                     s"'${ctx.name}'"
                 ),

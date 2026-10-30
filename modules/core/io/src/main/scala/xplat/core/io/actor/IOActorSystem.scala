@@ -1,21 +1,18 @@
 package xplat.core.io.actor
 
 import cats.effect.Resource
-import cats.effect.kernel.{Async, Deferred}
-import cats.effect.std.{Queue, Supervisor}
+import cats.effect.kernel.{Async, Deferred, Ref => CRef}
+import cats.effect.std.{Dispatcher, Queue, Supervisor}
 import cats.implicits._
 import com.softwaremill.quicklens.ModifyPimp
 import fs2.concurrent.Channel
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
-import xplat.core.api.Behavior.{OnContext, Same, Wrapper}
 import xplat.core.api._
-import xplat.core.io.actor.IOActorSystem.Command.{AddChild, ChildDown, OnMessage, OnSignal, Stop, StopChild}
+import xplat.core.io.actor.IOActorSystem.Command.{ChildDown, OnMessage, OnSignal, Stop}
 
-import java.util.UUID
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
-import cats.effect.std.Dispatcher
 
 final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(implicit A: Async[F]) extends ActorSystem[F] {
 
@@ -24,7 +21,7 @@ final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(i
   }
 
   override def schedule[T](f: => F[T], delay: FiniteDuration): F[Cancelable[F]] = {
-    A.start(A.sleep(delay) >> f).map(f => () => f.cancel)
+    context.schedule(f, delay)
   }
 
   override def terminate(): F[Unit] = {
@@ -38,7 +35,9 @@ object IOActorSystem {
   def apply[F[_]](name: String)(implicit A: Async[F]): Resource[F, ActorSystem[F]] = {
 
     for {
+      // Shutdown waits for actors to stop, but cancels pending scheduled tasks instead of waiting for their delay.
       supervisor <- Supervisor[F](await = true)
+      timers <- Supervisor[F](await = false)
       as <- Resource.make(
         for {
           root <- Actor[F, Nothing](
@@ -46,28 +45,31 @@ object IOActorSystem {
             behavior = Behaviors[F, Nothing]().same,
             parentPath = Seq("xplat"),
             notifyShutdown = A.unit,
-            supervisor = supervisor
+            supervisor = supervisor,
+            timers = timers
           )
         } yield IOActorSystem(root._2)
       )(r => r.terminate())
     } yield as
   }
 
-  private def defaultHandler[F[_], T]: PartialFunction[Signal, Behavior[F, T]] = { case _ =>
+  /** Signals handled by every actor when its own handler does not handle them. */
+  private def builtinSignals[F[_], T]: PartialFunction[Signal, Behavior[F, T]] = { case Signal.Kill =>
     Behavior.Stop[F, T]()
   }
 
   final case class Link[F[_]](name: String, requestShutdown: F[Unit])
+
+  /** Children registry of an actor. Once `closed`, the actor is shutting down and no new child can be added. */
+  final case class Children[F[_]](links: Map[String, Link[F]], closed: Boolean)
 
   sealed trait Command[F[_], T] {}
 
   object Command {
     final case class OnMessage[F[_], T](message: T) extends Command[F, T]
     final case class OnSignal[F[_], T](signal: Signal) extends Command[F, T]
-    final case class StopChild[F[_], T](name: String) extends Command[F, T]
     final case class ChildDown[F[_], T](name: String) extends Command[F, T]
     final case class Stop[F[_], T]() extends Command[F, T]
-    final case class AddChild[F[_], T](name: String, onBuild: F[Link[F]], onError: Deferred[F, Throwable]) extends Command[F, T]
 
     implicit def fromT[F[_], T](value: T): Command[F, T] = OnMessage(value)
     implicit def fromSignal[F[_], T](value: Signal): Command[F, T] = OnSignal(value)
@@ -78,7 +80,7 @@ object IOActorSystem {
     def signalHandler: PartialFunction[Signal, Behavior[F, T]]
     def context: Context[F, T]
     def notifyShutdownDone: F[Unit]
-    def children: Map[String, Link[F]]
+    def children: CRef[F, Children[F]]
     def reduce(command: Command[F, T]): F[State[F, T]]
 
     def withBehavior(behavior: Behavior[F, T]): State[F, T]
@@ -101,19 +103,22 @@ object IOActorSystem {
 
   private object State {
 
+    /** Resolves `behavior` until it is a message handler, `Same` or a stop. Setup behaviors (context, timers, stash) run
+      * here, once, and are not kept as the current behavior.
+      */
     private def fold[F[_], T](state: State[F, T], behavior: Behavior[F, T])(implicit A: Async[F]): F[State[F, T]] = {
       behavior match {
         case Behavior.Timer(time, message, f) =>
-          A.delay(
-            state.withBehavior(
-              Behavior.OnContext[F, T](c => c.schedule(c.pipe(message), time).map(f))
-            )
+          handleError[F, Behavior[F, T], T](
+            state.context.schedule(state.context.pipe(message), time).map(f),
+            state,
+            b => fold(state, b)
           )
         case Behavior.Stasher(size, f) =>
-          A.delay(
-            state.withBehavior(
-              Behavior.OnContext[F, T](c => IOStash[F, T](c, size).map(x => f(x)))
-            )
+          handleError[F, Behavior[F, T], T](
+            IOStash[F, T](state.context, size).map(f),
+            state,
+            b => fold(state, b)
           )
         case Behavior.Wrapper(effect) =>
           handleError[F, Behavior[F, T], T](
@@ -127,10 +132,10 @@ object IOActorSystem {
           handleError[F, Behavior[F, T], T](
             A.delay(f(state.context)),
             state,
-            b => fold(state.withBehavior(behavior), b)
+            b => fold(state, b)
           )
         case Behavior.Stop() =>
-          State.Terminated(behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+          terminate(state)
         case Behavior.OnSignal(f, nested) =>
           val next: State[F, T] = state.withSignalHandler(f)
           fold(next, nested)
@@ -139,9 +144,12 @@ object IOActorSystem {
       }
     }
 
+    private def terminate[F[_], T](state: State[F, T])(implicit A: Async[F]): F[State[F, T]] =
+      State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+
     private def handleError[F[_], T, A](f: => F[T], state: State[F, A], onSuccess: T => F[State[F, A]])(implicit A: Async[F]): F[State[F, A]] = {
 
-      f.flatMap(onSuccess).recoverWith { error =>
+      A.defer(f).flatMap(onSuccess).recoverWith { error =>
         val signal: Signal = Signal.OnError(error)
         val isDefined: Boolean = state.signalHandler.isDefinedAt(signal)
 
@@ -152,15 +160,10 @@ object IOActorSystem {
               fold(state, b)
             }
             .recoverWith { error =>
-              state.context.log.error(error.getLocalizedMessage, error) >>
-                State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
+              state.context.log.error(error.getLocalizedMessage, error) >> terminate(state)
             }
         } else {
-
-          for {
-            _ <- state.context.log.error(error.getLocalizedMessage, error)
-            next <- State.Terminated(state.behavior, state.context, state.notifyShutdownDone, state.children, state.signalHandler).setup()
-          } yield next
+          state.context.log.error(error.getLocalizedMessage, error) >> terminate(state)
         }
       }
     }
@@ -169,13 +172,16 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: Map[String, Link[F]],
+        children: CRef[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
 
       def setup(): F[State[F, T]] = {
-        fold(this, behavior).flatMap(s => Running[F, T](s.behavior, s.context, s.notifyShutdownDone, s.children, s.signalHandler).setup())
+        fold(this.withBehavior(Behavior.Same()), behavior).flatMap {
+          case s: Init[F, T] => Running[F, T](s.behavior, s.context, s.notifyShutdownDone, s.children, s.signalHandler).setup()
+          case stopped       => A.pure(stopped)
+        }
       }
 
       override def reduce(command: Command[F, T]): F[State[F, T]] = A.pure(this)
@@ -187,7 +193,7 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: Map[String, Link[F]],
+        children: CRef[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
@@ -201,63 +207,24 @@ object IOActorSystem {
           case OnMessage(message) =>
             onMessage(message, this, behavior)
           case OnSignal(signal) =>
-            onSignal(signal, this, behavior)
-          case StopChild(name) =>
-            children.get(name) match {
-              case None =>
-                A.pure(this)
-              case Some(link) =>
-                link.requestShutdown.as(this)
-            }
+            onSignal(signal)
           case Stop() =>
-            Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
-          case AddChild(name, onBuild, onError) =>
-            if (children.contains(name)) {
-              onError.complete(new Exception(s"children $name exists")).as(this)
-            } else {
-              onBuild.map { link =>
-                this.modify(_.children).using(xs => xs + (name -> link))
-              }
-            }
+            terminate(this)
           case ChildDown(name) =>
-            A.pure(this.modify(_.children).using(_ - name))
+            children.update(c => c.copy(links = c.links - name)).as(this)
         }
       }
 
-      private def onSignal(signal: Signal, state: State[F, T], behavior: Behavior[F, T]): F[State[F, T]] = {
-        behavior match {
-          case Behavior.OnContext(f) =>
-            handleError[F, Behavior[F, T], T](
-              A.delay(f(state.context)),
-              state,
-              b => onSignal(signal, state, b)
-            )
-          case Behavior.Stop() =>
-            Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
-          case Behavior.Same() =>
-            state.pure[F]
-          case Behavior.Wrapper(effect) =>
-            handleError[F, Behavior[F, T], T](
-              effect,
-              state,
-              b => onSignal(signal, state, b)
-            )
-          case Behavior.OnMessage(f) =>
-            state.withBehavior(Behavior.OnMessage(f)).pure[F]
-          case Behavior.OnSignal(f, nested) =>
-            if (f.isDefinedAt(signal)) {
-              handleError[F, Behavior[F, T], T](
-                A.delay(f(signal)),
-                state,
-                b => fold(state.withSignalHandler(f), b)
-              )
-            } else {
-              fold(state.withSignalHandler(f), nested)
-            }
-          case item: Behavior.Timer[F, T] =>
-            fold(state, item) >>= (s => onSignal(signal, s, s.behavior))
-          case item: Behavior.Stasher[F, T] =>
-            fold(state, item) >>= (s => onSignal(signal, s, s.behavior))
+      private def onSignal(signal: Signal): F[State[F, T]] = {
+        val handler = signalHandler.orElse(builtinSignals[F, T])
+        if (handler.isDefinedAt(signal)) {
+          handleError[F, Behavior[F, T], T](
+            A.delay(handler(signal)),
+            this,
+            b => fold(this, b)
+          )
+        } else {
+          A.pure(this)
         }
       }
 
@@ -280,7 +247,7 @@ object IOActorSystem {
           case Behavior.OnSignal(f, nested) =>
             onMessage(message, state.withSignalHandler(f), nested)
           case Behavior.Stop() =>
-            Terminated(behavior, context, notifyShutdownDone, children, signalHandler).setup()
+            terminate(state)
           case Behavior.Wrapper(effect) =>
             handleError[F, Behavior[F, T], T](
               effect,
@@ -302,43 +269,58 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: Map[String, Link[F]],
+        children: CRef[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
 
       override def withBehavior(behavior: Behavior[F, T]): State[F, T] = this.modify(_.behavior).setTo(behavior)
 
+      /** Closes the children registry and asks every child to stop. The actor finishes once the last child is down. */
       def setup(): F[State[F, T]] = {
-        if (children.isEmpty) {
-          notifyShutdownDone.as(this.withBehavior(Behavior.Stop()))
-        } else {
-          context.log.debug(s"Starting shuting down actor ${context.path}") >>
-            children.values
-              .map(x => x.requestShutdown.as[Option[String]](None).handleError(_ => Option(x.name)))
-              .toList
-              .sequence
-              .map { xs =>
-                val nextChildren: Map[String, Link[F]] = xs.flatten.foldLeft(children) { case (acc, item) => acc - item }
-                this.modify(_.children).setTo(nextChildren).withBehavior(Behavior.Stop())
-              }
+        val stopped = this.withBehavior(Behavior.Stop())
+        children.modify(c => (c.copy(closed = true), c.links)).flatMap { links =>
+          if (links.isEmpty) {
+            finish.as(stopped)
+          } else {
+            // Requests run on their own fibers so a child that is still being built never blocks this actor.
+            context.log.debug(s"Starting shutting down actor ${context.path}") >>
+              links.values.toList.traverse_(link => A.start(link.requestShutdown.attempt)).as(stopped)
+          }
         }
       }
 
       def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
           case ChildDown(name) =>
-            val nextChildren: Map[String, Link[F]] = children - name
-            if (nextChildren.isEmpty) {
-              notifyShutdownDone.as(this.modify(_.children).setTo(nextChildren))
-            } else {
-              A.pure(this.modify(_.children).setTo(nextChildren))
-            }
-          case AddChild(_, _, onError) =>
-            onError.complete(new Exception(s"Actor is down")).as(this)
+            children
+              .modify { c =>
+                val next = c.copy(links = c.links - name)
+                (next, c.links.contains(name) && next.links.isEmpty)
+              }
+              .flatMap(lastChild => if (lastChild) finish.as(this) else A.pure(this))
           case _ =>
             A.pure(this)
         }
+      }
+
+      /** Delivers PostStop to the actor, then closes its mailbox. */
+      private def finish: F[Unit] = postStop >> notifyShutdownDone
+
+      private def postStop: F[Unit] = {
+        if (signalHandler.isDefinedAt(Signal.PostStop)) {
+          runEffects(A.delay(signalHandler(Signal.PostStop)))
+            .handleErrorWith(error => context.log.error(error.getLocalizedMessage, error))
+        } else {
+          A.unit
+        }
+      }
+
+      /** Runs the effects of a behavior returned while stopping. The behavior itself is discarded. */
+      private def runEffects(fb: F[Behavior[F, T]]): F[Unit] = fb.flatMap {
+        case Behavior.Wrapper(effect) => runEffects(effect)
+        case Behavior.OnContext(f)    => runEffects(A.delay(f(context)))
+        case _                        => A.unit
       }
 
     }
@@ -363,7 +345,7 @@ object IOActorSystem {
 
   private object IOStash {
 
-    def apply[F[_], T](context: Context[F, T], size: Int)(implicit A:Async[F]): F[Stash[F, T]] = {
+    def apply[F[_], T](context: Context[F, T], size: Int)(implicit A: Async[F]): F[Stash[F, T]] = {
       if (size == 0) {
         Queue.unbounded[F, T].map(q => IOStash(q, context))
       } else {
@@ -384,7 +366,7 @@ object IOActorSystem {
     override def stop(): F[Unit] = actor.stop()
 
     override def schedule[A](f: => F[A], delay: FiniteDuration): F[Cancelable[F]] = {
-      A.start(A.sleep(delay) >> f).map(f => () => f.cancel)
+      actor.timers.supervise(A.sleep(delay) >> f).map(fiber => () => fiber.cancel)
     }
 
   }
@@ -393,7 +375,9 @@ object IOActorSystem {
       name: String,
       parentPath: Seq[String],
       channel: Channel[F, Command[F, T]],
-      supervisor: Supervisor[F]
+      supervisor: Supervisor[F],
+      timers: Supervisor[F],
+      children: CRef[F, Children[F]]
   )(implicit A: Async[F])
       extends ActorRef[F, T] {
     self =>
@@ -407,7 +391,7 @@ object IOActorSystem {
     }
 
     def stopChild(name: String): F[Unit] = {
-      push(Command.StopChild(name))
+      children.get.flatMap(_.links.get(name).traverse_(_.requestShutdown))
     }
 
     def signal(signal: Signal): F[Unit] = {
@@ -416,38 +400,34 @@ object IOActorSystem {
 
     def stop(): F[Unit] = push(Command.Stop())
 
-    def spawn[A](name: String, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
-      Async[F].async { resolve =>
-        for {
-          onBuild <- Deferred[F, Actor[F, A]]
-          onError <- Deferred[F, Throwable]
-          _ <- push(
-            Command.AddChild(
-              name,
-              Actor[F, A](
-                name = name,
-                behavior = b(Behaviors[F, A]()),
-                parentPath = parentPath :+ self.name,
-                notifyShutdown = push(Command.ChildDown(name)),
-                supervisor = supervisor
-              ) >>= { case (actorRef, _) =>
-                onBuild
-                  .complete(actorRef)
-                  .as(
-                    Link[F](
-                      name = name,
-                      requestShutdown = actorRef.stop()
-                    )
-                  )
-              },
-              onError
+    /** Builds the child on the calling fiber, so it also works from inside this actor's own handlers. The name is
+      * reserved first, which rejects duplicates and children of an actor that is shutting down.
+      */
+    def spawn[A](childName: String, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
+      Deferred[F, Option[Actor[F, A]]].flatMap { built =>
+        val link = Link[F](childName, built.get.flatMap(_.traverse_(_.stop())))
+
+        val reserve: F[Unit] = children.modify { c =>
+          if (c.closed) (c, A.raiseError[Unit](new Exception(s"Actor $path is down")))
+          else if (c.links.contains(childName)) (c, A.raiseError[Unit](new Exception(s"children $childName exists")))
+          else (c.copy(links = c.links + (childName -> link)), A.unit)
+        }.flatten
+
+        val build: F[ActorRef[F, A]] = A
+          .defer(
+            Actor[F, A](
+              name = childName,
+              behavior = b(Behaviors[F, A]()),
+              parentPath = parentPath :+ self.name,
+              notifyShutdown = push(Command.ChildDown(childName)).attempt.void,
+              supervisor = supervisor,
+              timers = timers
             )
           )
-          result <- A.race(onError.get, onBuild.get)
-        } yield {
-          resolve(result)
-          None
-        }
+          .flatMap { case (child, _) => built.complete(Some(child)).as(child: ActorRef[F, A]) }
+          .onError { case _ => built.complete(None) >> push(Command.ChildDown(childName)).attempt.void }
+
+        reserve >> build
       }
     }
 
@@ -490,13 +470,15 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         parentPath: Seq[String],
         notifyShutdown: F[Unit],
-        supervisor: Supervisor[F]
+        supervisor: Supervisor[F],
+        timers: Supervisor[F]
     )(implicit A: Async[F]): F[(Actor[F, T], Context[F, T])] = {
 
       for {
-
-        channel <- Channel.synchronous[F, Command[F, T]]
-        actor = Actor[F, T](name, parentPath, channel, supervisor)
+        // Unbounded so an actor can send to itself (pipe, unstash, timers) without waiting on its own loop.
+        channel <- Channel.unbounded[F, Command[F, T]]
+        children <- CRef.of[F, Children[F]](Children(Map.empty, closed = false))
+        actor = Actor[F, T](name, parentPath, channel, supervisor, timers, children)
         logLib <- Slf4jLogger.fromName[F](actor.path)
         log = IOLogger.build(logLib)
         context = IOContext[F, T](actor, log)
@@ -506,8 +488,8 @@ object IOActorSystem {
             behavior = behavior,
             context = context,
             notifyShutdownDone = channel.close.void,
-            children = Map.empty,
-            signalHandler = defaultHandler
+            children = children,
+            signalHandler = PartialFunction.empty
           )
           .setup()
 
