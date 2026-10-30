@@ -21,7 +21,7 @@ object ClusterTestKit {
     gossipInterval = 50.millis,
     retryInterval = 100.millis,
     heartbeatInterval = 50.millis,
-    unreachableAfter = 500.millis
+    failureDetector = FailureDetectorConfig(acceptableHeartbeatPause = 300.millis, minStdDeviation = 50.millis)
   )
 
   def address(port: Int): Address = Address("sys", "127.0.0.1", port)

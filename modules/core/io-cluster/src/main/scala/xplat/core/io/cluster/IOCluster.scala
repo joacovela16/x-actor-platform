@@ -18,9 +18,10 @@ import scala.concurrent.duration._
 
 /** Cluster node over a [[TransportFactory]].
   *
-  * Membership spreads by gossip: every `gossipInterval` the node sends its view to all members, and views are merged by
-  * version. A node is unreachable when no heartbeat arrived from it for `unreachableAfter`. The leader (lowest reachable
-  * address) moves members through their statuses once every reachable member has seen the same view.
+  * Membership spreads by gossip: every `gossipInterval` the node sends its view to `gossipFanout` members, preferring
+  * those that have not seen it, and views are merged by version. Each member is watched by a few neighbours on a ring,
+  * which use a phi accrual failure detector on its heartbeats. The leader (lowest reachable address) moves members
+  * through their statuses once every reachable member has seen the same view.
   */
 final class IOCluster[F[_]] private (
     val system: ActorSystem[F],
@@ -36,7 +37,7 @@ final class IOCluster[F[_]] private (
     mutex: Semaphore[F],
     subscribers: Ref[F, Map[Long, Queue[F, ClusterEvent]]],
     nextSubscriber: Ref[F, Long],
-    lastSeen: Ref[F, Map[UniqueAddress, FiniteDuration]],
+    detectors: Ref[F, Map[UniqueAddress, PhiAccrual]],
     joined: Deferred[F, Unit],
     up: Deferred[F, Unit],
     removed: Deferred[F, Unit],
@@ -118,13 +119,11 @@ final class IOCluster[F[_]] private (
   private def afterChange(before: GossipState, after: GossipState): F[Unit] = {
     val events = Events.diff(before.view, after.view)
     for {
-      now <- Clock[F].monotonic
-      _   <- lastSeen.update(seen => after.members.keys.foldLeft(seen)((acc, id) => if (acc.contains(id)) acc else acc.updated(id, now)) -- after.tombstones)
       subs <- subscribers.get
       _   <- subs.values.toList.traverse_(q => events.traverse_(q.offer))
       _   <- A.whenA(after.members.contains(self))(joined.complete(()).void)
       _   <- A.whenA(after.members.get(self).exists(m => Set[MemberStatus](MemberStatus.Up, MemberStatus.Leaving, MemberStatus.Exiting)(m.status)))(up.complete(()).void)
-      _   <- A.whenA(after.tombstones(self) || after.members.get(self).exists(_.status == MemberStatus.Down))(removed.complete(()).void)
+      _   <- A.whenA(after.isRemoved(self) || after.members.get(self).exists(_.status == MemberStatus.Down))(removed.complete(()).void)
       _   <- receptionist.membershipChanged(after)
       _   <- events.traverse_(e => log.debug(s"$self: $e"))
     } yield ()
@@ -137,7 +136,7 @@ final class IOCluster[F[_]] private (
       case Left(e)                      => log.warn(e)("Dropping a message that cannot be decoded")
       case Right(Wire.Join(node, roles)) => handleJoin(node, roles)
       case Right(Wire.Gossip(from, g))  => handleGossip(from, g)
-      case Right(Wire.Heartbeat(from))  => Clock[F].monotonic.flatMap(now => lastSeen.update(_.updated(from, now)))
+      case Right(Wire.Heartbeat(from))  => onHeartbeat(from)
       case Right(r: Wire.Registry)      => receptionist.receive(r)
       case Right(other)                 => remoting.receive(other)
     }
@@ -146,7 +145,7 @@ final class IOCluster[F[_]] private (
     isTerminated.ifM(
       A.unit,
       update { g =>
-        if (!g.members.contains(self) || g.tombstones(node) || g.members.contains(node)) g
+        if (!g.members.contains(self) || g.isRemoved(node) || g.members.contains(node)) g
         else
           g.changed(self) { g0 =>
             // A node restarted on the same address replaces its previous incarnation.
@@ -159,11 +158,16 @@ final class IOCluster[F[_]] private (
   private def handleGossip(from: UniqueAddress, remote: GossipState): F[Unit] =
     isTerminated.ifM(
       A.unit,
-      update { local =>
+      gossip.get.flatMap { current =>
         // Only gossip from our own cluster: it knows us, or we know the sender.
-        val ours = remote.members.contains(self) || remote.tombstones(self) || local.members.contains(from)
-        if (ours) local.receive(self, remote) else local
-      }.void
+        val ours = remote.members.contains(self) || remote.isRemoved(self) || current.members.contains(from)
+        A.whenA(ours) {
+          update(_.receive(self, remote)).flatMap { result =>
+            // Push-pull: if the sender lacks something we know (a newer version, or who has seen it), answer at once.
+            A.whenA(result.version != remote.version || result.seen != remote.seen)(sendGossip(from.address, result))
+          }
+        }
+      }
     )
 
   private def sendGossip(to: Address, g: GossipState): F[Unit] = sendWire(to, Wire.Gossip(self, g))
@@ -182,7 +186,7 @@ final class IOCluster[F[_]] private (
   }
 
   private def selfJoin: F[Unit] =
-    update(g => if (g.members.isEmpty && !g.tombstones(self)) g.changed(self)(_.withMember(Member(self, MemberStatus.Joining, config.roles))) else g).void
+    update(g => if (g.members.isEmpty && !g.isRemoved(self)) g.changed(self)(_.withMember(Member(self, MemberStatus.Joining, config.roles))) else g).void
 
   private def joinLoop(seeds: List[Address], start: FiniteDuration, selfJoinAfter: Option[FiniteDuration]): F[Unit] =
     joined.tryGet.flatMap {
@@ -199,25 +203,47 @@ final class IOCluster[F[_]] private (
   private def every(interval: FiniteDuration)(tick: F[Unit]): F[Unit] =
     (tick.handleErrorWith(e => log.warn(e)("Cluster task failed")) >> A.sleep(interval)).foreverM.race(removed.get).void
 
+  /** Members to gossip with: those that have not seen the current view first, then random others. */
+  private def gossipTargets(g: GossipState): F[List[UniqueAddress]] = A.delay {
+    val (unseen, seen) = scala.util.Random.shuffle(g.members.keys.filter(_ != self).toList).partition(id => !g.seen(id))
+    (unseen ++ seen).take(config.gossipFanout)
+  }
+
   private def gossipTick: F[Unit] =
     for {
+      now    <- Clock[F].realTime.map(_.toMillis)
       before <- gossip.get
-      after  <- update(g => if (g.members.contains(self)) g.leaderActions(self) else g)
+      after  <- update(g => if (g.members.contains(self)) g.leaderActions(self, now) else g)
       // Removed members are no longer gossiped to, so they get the gossip that removes them directly.
-      newlyRemoved = after.tombstones -- before.tombstones - self
-      _ <- newlyRemoved.toList.traverse_(id => sendGossip(id.address, after))
-      _ <- A.whenA(after.members.contains(self))(after.members.keys.filter(_ != self).toList.traverse_(id => sendGossip(id.address, after)))
+      newlyRemoved = (after.tombstones.keySet -- before.tombstones.keySet) - self
+      _       <- newlyRemoved.toList.traverse_(id => sendGossip(id.address, after))
+      targets <- gossipTargets(after)
+      _       <- A.whenA(after.members.contains(self))(targets.traverse_(id => sendGossip(id.address, after)))
+      // Pruning is local cleanup: it changes neither the version nor the members, so no event is published.
+      _ <- mutex.permit.surround(gossip.update(_.pruned(now - config.pruneTombstonesAfter.toMillis)))
       _ <- receptionist.broadcast
     } yield ()
 
+  private def onHeartbeat(from: UniqueAddress): F[Unit] =
+    Clock[F].monotonic.flatMap { now =>
+      detectors.update(d => d.updated(from, d.get(from).fold(PhiAccrual.start(config.failureDetector, config.heartbeatInterval.toMillis, now.toMillis))(_.heartbeat(now.toMillis))))
+    }
+
+  /** Sends heartbeats to the members that watch this node, and checks the members it watches. */
   private def heartbeatTick: F[Unit] =
     for {
       g <- gossip.get
-      others = g.members.keys.filter(_ != self).toList
-      _    <- others.traverse_(id => sendWire(id.address, Wire.Heartbeat(self)))
-      now  <- Clock[F].monotonic
-      seen <- lastSeen.get
-      unreachableNow = others.filter(id => now - seen.getOrElse(id, now) > config.unreachableAfter).toSet
+      others = g.members.keySet - self
+      k = config.failureDetector.monitoredBy
+      _   <- HeartbeatRing.receivers(self, others, k).toList.traverse_(id => sendWire(id.address, Wire.Heartbeat(self)))
+      now <- Clock[F].monotonic.map(_.toMillis)
+      monitored = HeartbeatRing.monitored(self, others, k)
+      current <- detectors.updateAndGet { d =>
+        // Members that became watched start with a fresh detector, as if a heartbeat had just arrived.
+        val kept = d.filter { case (id, _) => monitored(id) }
+        kept ++ monitored.filterNot(kept.contains).map(id => id -> PhiAccrual.start(config.failureDetector, config.heartbeatInterval.toMillis, now))
+      }
+      unreachableNow = monitored.filter(id => current.get(id).exists(!_.isAvailable(now)))
       _ <- update(g => if (g.members.contains(self)) g.changed(self)(_.withObservation(self, unreachableNow)) else g)
     } yield ()
 
@@ -309,7 +335,7 @@ object IOCluster {
       dispatcher <- Dispatcher.parallel[F](await = false)
       uid        <- Resource.eval(A.delay(scala.util.Random.nextLong()))
       instance   <- Resource.eval(Deferred[F, IOCluster[F]])
-      transport  <- factory.bind(system.name, config.host, config.port, bytes => instance.get.flatMap(_.receive(bytes)))
+      transport  <- factory.bind(system.name, config.host, config.port, config.security, bytes => instance.get.flatMap(_.receive(bytes)))
       self = UniqueAddress(transport.address, uid)
       sendWire = (to: Address, wire: Wire) => transport.send(to, Wire.encode(wire)).attempt.void
       remoting <- Resource.eval(Remoting[F](self.address, sendWire, supervisor, log))
@@ -324,15 +350,15 @@ object IOCluster {
           Semaphore[F](1),
           Ref.of[F, Map[Long, Queue[F, ClusterEvent]]](Map.empty),
           Ref.of[F, Long](0L),
-          Ref.of[F, Map[UniqueAddress, FiniteDuration]](Map.empty),
+          Ref.of[F, Map[UniqueAddress, PhiAccrual]](Map.empty),
           Deferred[F, Unit],
           Deferred[F, Unit],
           Deferred[F, Unit],
           Ref.of[F, Map[String, Deferred[F, Context[F, Unit]]]](Map.empty),
           Ref.of[F, SbrState](SbrState((Set.empty, Set.empty), now, None))
-        ).mapN { (mutex, subscribers, nextSubscriber, lastSeen, joined, up, removed, guardians, sbr) =>
+        ).mapN { (mutex, subscribers, nextSubscriber, detectors, joined, up, removed, guardians, sbr) =>
           new IOCluster[F](
-            system, config, self, remoting, resolver, asks, receptionist, leaseProvider, sendWire, gossip, mutex, subscribers, nextSubscriber, lastSeen, joined, up,
+            system, config, self, remoting, resolver, asks, receptionist, leaseProvider, sendWire, gossip, mutex, subscribers, nextSubscriber, detectors, joined, up,
             removed, guardians, sbr, sbrLease, supervisor, log
           )
         }

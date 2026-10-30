@@ -45,7 +45,7 @@ object Wire {
     w.seq(g.reachability) { case (w, (observer, reach)) =>
       unique(w, observer); w.long(reach.version).seq(reach.unreachable)(unique)
     }
-    w.seq(g.tombstones)(unique)
+    w.seq(g.tombstones) { case (w, (id, at)) => unique(w, id); w.long(at) }
     w.seq(g.version.versions) { case (w, (node, v)) => unique(w, node); w.long(v) }
     w.seq(g.seen)(unique)
     ()
@@ -54,7 +54,7 @@ object Wire {
   private def gossip(r: BinReader): GossipState = {
     val members = r.seq(member).map(m => m.uniqueAddress -> m).toMap
     val reach = r.seq(r => unique(r) -> Reach(r.long(), r.seq(unique).toSet)).toMap
-    val tombs = r.seq(unique).toSet
+    val tombs = r.seq(r => unique(r) -> r.long()).toMap
     val version = VectorClock(r.seq(r => unique(r) -> r.long()).toMap)
     val seen = r.seq(unique).toSet
     GossipState(members, reach, tombs, version, seen)

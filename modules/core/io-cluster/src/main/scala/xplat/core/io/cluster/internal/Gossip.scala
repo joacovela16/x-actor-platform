@@ -40,7 +40,8 @@ final case class Reach(version: Long, unreachable: Set[UniqueAddress])
 /** Cluster view shared between nodes by gossip.
   *
   * @param tombstones
-  *   members that were removed. They are never added back, so a stale gossip cannot bring them back to life.
+  *   members that were removed, with the time of removal (epoch millis). They are never added back, so a stale gossip
+  *   cannot bring them back to life, until they are pruned.
   * @param seen
   *   nodes that have seen this exact version. When every reachable member has, the gossip has converged and the leader
   *   can change member statuses.
@@ -48,7 +49,7 @@ final case class Reach(version: Long, unreachable: Set[UniqueAddress])
 final case class GossipState(
     members: Map[UniqueAddress, Member],
     reachability: Map[UniqueAddress, Reach],
-    tombstones: Set[UniqueAddress],
+    tombstones: Map[UniqueAddress, Long],
     version: VectorClock,
     seen: Set[UniqueAddress]
 ) {
@@ -88,13 +89,18 @@ final case class GossipState(
   }
 
   def withMember(member: Member): GossipState =
-    if (tombstones(member.uniqueAddress)) this else copy(members = members.updated(member.uniqueAddress, member))
+    if (tombstones.contains(member.uniqueAddress)) this else copy(members = members.updated(member.uniqueAddress, member))
 
   def withStatus(id: UniqueAddress, status: MemberStatus): GossipState =
     members.get(id).fold(this)(m => copy(members = members.updated(id, m.copy(status = status))))
 
-  def removed(ids: Iterable[UniqueAddress]): GossipState =
-    copy(members = members -- ids, reachability = reachability -- ids, tombstones = tombstones ++ ids)
+  def removed(ids: Iterable[UniqueAddress], at: Long): GossipState =
+    copy(members = members -- ids, reachability = reachability -- ids, tombstones = tombstones ++ ids.map(_ -> at))
+
+  /** Forgets members removed before `before`. Local cleanup: it does not change the version. */
+  def pruned(before: Long): GossipState = copy(tombstones = tombstones.filter { case (_, at) => at >= before })
+
+  def isRemoved(id: UniqueAddress): Boolean = tombstones.contains(id)
 
   /** Records what `observer` can not reach. */
   def withObservation(observer: UniqueAddress, unreachableNow: Set[UniqueAddress]): GossipState = {
@@ -105,8 +111,8 @@ final case class GossipState(
 
   /** Combines two views that changed concurrently. */
   def merge(other: GossipState): GossipState = {
-    val tombs = tombstones ++ other.tombstones
-    val ids = (members.keySet ++ other.members.keySet) -- tombs
+    val tombs = other.tombstones.foldLeft(tombstones) { case (acc, (id, at)) => acc.updated(id, acc.get(id).fold(at)(math.min(_, at))) }
+    val ids = (members.keySet ++ other.members.keySet) -- tombs.keySet
     val mergedMembers = ids.iterator.map { id =>
       val m = (members.get(id), other.members.get(id)) match {
         case (Some(a), Some(b)) => GossipState.latest(a, b)
@@ -114,7 +120,7 @@ final case class GossipState(
       }
       id -> m
     }.toMap
-    val observers = (reachability.keySet ++ other.reachability.keySet) -- tombs
+    val observers = (reachability.keySet ++ other.reachability.keySet) -- tombs.keySet
     val mergedReach = observers.iterator.map { o =>
       o -> Seq(reachability.get(o), other.reachability.get(o)).flatten.maxBy(_.version)
     }.toMap
@@ -134,7 +140,7 @@ final case class GossipState(
     * ones Exiting, and exiting or down ones are removed. Without it, only joining members that are reachable become
     * WeaklyUp, so the cluster can grow while a member is unreachable.
     */
-  def leaderActions(self: UniqueAddress): GossipState =
+  def leaderActions(self: UniqueAddress, now: Long): GossipState =
     if (!leader.contains(self)) this
     else if (convergence) {
       changed(self) { g =>
@@ -149,7 +155,7 @@ final case class GossipState(
             case _       => m
           }
         }
-        g.copy(members = updated.map(m => m.uniqueAddress -> m).toMap).removed(toRemove)
+        g.copy(members = updated.map(m => m.uniqueAddress -> m).toMap).removed(toRemove, now)
       }
     } else if (unreachable.nonEmpty) {
       changed(self) { g =>
@@ -160,7 +166,7 @@ final case class GossipState(
 }
 
 object GossipState {
-  val empty: GossipState = GossipState(Map.empty, Map.empty, Set.empty, VectorClock.empty, Set.empty)
+  val empty: GossipState = GossipState(Map.empty, Map.empty, Map.empty, VectorClock.empty, Set.empty)
 
   private val precedence: Map[MemberStatus, Int] =
     Map(Joining -> 0, WeaklyUp -> 1, Up -> 2, Leaving -> 3, Exiting -> 4, Down -> 5, Removed -> 6)

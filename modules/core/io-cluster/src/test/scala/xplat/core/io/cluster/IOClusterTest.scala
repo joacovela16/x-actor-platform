@@ -95,6 +95,20 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
   "failure detection" - {
 
+    "a bigger cluster converges and detects a failure with partial gossip and heartbeats" in {
+      InMemoryNetwork[IO].flatMap { network =>
+        (1 to 8).toList.traverse(p => node(network, p, List(address(1)))).use { nodes =>
+          for {
+            _ <- allUp(nodes)
+            _ <- network.partition((1 to 7).map(address).toSet, Set(address(8)))
+            _ <- nodes.take(7).traverse_(n => eventually(n.cluster.state)(_.unreachable.map(_.address) == Set(address(8))))
+            _ <- nodes.head.cluster.down(address(8))
+            _ <- nodes.take(7).traverse_(n => eventually(statuses(n.cluster))(s => s.size == 7 && s.values.forall(_ == MemberStatus.Up)))
+          } yield succeed
+        }
+      }.timeout(Timeout)
+    }
+
     "a cut-off node becomes unreachable, and reachable again when the network heals" in {
       InMemoryNetwork[IO].flatMap { network =>
         threeNodes(network).use { nodes =>
@@ -222,6 +236,18 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
   }
 
   "TCP transport" - {
+
+    "a cluster over mutual TLS with a shared secret" in {
+      def tlsFile(name: String) = java.nio.file.Paths.get(getClass.getResource(s"/tls/$name").toURI)
+      val security = TransportSecurity(Some(TlsConfig(tlsFile("node.p12"), "changeit", tlsFile("trust.p12"), "changeit")), Some("s3cret"))
+      val config = fastConfig.copy(security = security)
+      val tcp = TcpTransport[IO]
+      node(tcp, 0, Nil, config).use { seed =>
+        node(tcp, 0, List(seed.address), config).use { other =>
+          seed.cluster.join(List(seed.address)) >> allUp(List(seed, other)).as(succeed)
+        }
+      }.timeout(Timeout)
+    }
 
     "nodes in a cluster over TCP see each other and exchange asks" in {
       val tcp = TcpTransport[IO]

@@ -60,7 +60,7 @@ class GossipStateTest extends AnyFreeSpec with Matchers {
     }
 
     "never brings back a removed member" in {
-      val removed = base.changed(id(1))(_.removed(Seq(id(2))))
+      val removed = base.changed(id(1))(_.removed(Seq(id(2)), 0L))
       val stale = base.changed(id(2))(_.withStatus(id(2), Leaving))
       removed.receive(id(1), stale).members.keySet shouldBe Set(id(1))
     }
@@ -68,6 +68,11 @@ class GossipStateTest extends AnyFreeSpec with Matchers {
     "merging the same versions marks them as seen by both" in {
       base.receive(id(2), base.copy(seen = Set(id(1)))).seen shouldBe Set(id(1), id(2))
     }
+  }
+
+  "removed members are forgotten once pruned, and stay removed until then" in {
+    val g = gossip(member(1, Up, 1), member(2, Up, 2)).removed(Seq(id(2)), at = 1000L)
+    (g.pruned(before = 500L).isRemoved(id(2)), g.pruned(before = 2000L).isRemoved(id(2))) shouldBe (true, false)
   }
 
   "reachability" - {
@@ -111,44 +116,44 @@ class GossipStateTest extends AnyFreeSpec with Matchers {
 
   "leader actions" - {
     "move joining members to Up with increasing up numbers" in {
-      val g = converged(member(1, Up, 1), member(3, Joining), member(2, Joining)).leaderActions(id(1))
+      val g = converged(member(1, Up, 1), member(3, Joining), member(2, Joining)).leaderActions(id(1), 0L)
       g.members.values.map(m => m.uniqueAddress -> (m.status, m.upNumber)).toMap shouldBe
         Map(id(1) -> (Up, 1), id(2) -> (Up, 2), id(3) -> (Up, 3))
     }
 
     "move leaving members to Exiting, then remove them" in {
-      val exiting = converged(member(1, Up, 1), member(2, Leaving, 2)).leaderActions(id(1))
+      val exiting = converged(member(1, Up, 1), member(2, Leaving, 2)).leaderActions(id(1), 0L)
       exiting.members(id(2)).status shouldBe Exiting
-      val removed = exiting.copy(seen = exiting.members.keySet).leaderActions(id(1))
-      (removed.members.keySet, removed.tombstones) shouldBe (Set(id(1)), Set(id(2)))
+      val removed = exiting.copy(seen = exiting.members.keySet).leaderActions(id(1), 0L)
+      (removed.members.keySet, removed.tombstones.keySet) shouldBe (Set(id(1)), Set(id(2)))
     }
 
     "remove down members even if unreachable" in {
       val g = converged(member(1, Up, 1), member(2, Down, 2)).withObservation(id(1), Set(id(2)))
-      g.leaderActions(id(1)).members.keySet shouldBe Set(id(1))
+      g.leaderActions(id(1), 0L).members.keySet shouldBe Set(id(1))
     }
 
     "only the leader acts" in {
       val g = converged(member(1, Up, 1), member(2, Joining))
-      g.leaderActions(id(2)) shouldBe g
+      g.leaderActions(id(2), 0L) shouldBe g
     }
 
     "without convergence, reachable joining members become WeaklyUp" in {
       val g = converged(member(1, Up, 1), member(2, Up, 2), member(3, Joining)).withObservation(id(1), Set(id(2)))
-      g.leaderActions(id(1)).members(id(3)).status shouldBe WeaklyUp
+      g.leaderActions(id(1), 0L).members(id(3)).status shouldBe WeaklyUp
     }
 
     "a single node joins and leaves alone" in {
-      val up = converged(member(1, Joining)).leaderActions(id(1))
+      val up = converged(member(1, Joining)).leaderActions(id(1), 0L)
       up.members(id(1)).status shouldBe Up
       val leaving = up.changed(id(1))(_.withStatus(id(1), Leaving))
-      val exiting = leaving.leaderActions(id(1))
-      exiting.leaderActions(id(1)).tombstones shouldBe Set(id(1))
+      val exiting = leaving.leaderActions(id(1), 0L)
+      exiting.leaderActions(id(1), 0L).tombstones.keySet shouldBe Set(id(1))
     }
   }
 
   "wire messages survive encoding" in {
-    val g = converged(member(1, Up, 1), member(2, Leaving, 2)).withObservation(id(1), Set(id(2))).changed(id(1))(_.removed(Seq(id(9))))
+    val g = converged(member(1, Up, 1), member(2, Leaving, 2)).withObservation(id(1), Set(id(2))).changed(id(1))(_.removed(Seq(id(9)), 0L))
     val messages = Seq[Wire](
       Wire.Join(id(1), Set("a", "b")),
       Wire.Gossip(id(1), g),

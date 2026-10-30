@@ -3,9 +3,11 @@ package xplat.core.io.cluster.transport
 import cats.effect.kernel.{Async, Ref, Resource}
 import cats.effect.std.Queue
 import cats.implicits._
-import xplat.core.cluster.api.Address
+import xplat.core.cluster.api.{Address, TransportSecurity}
 
-/** Network of nodes running in the same process, for tests and local development. It can simulate network splits. */
+/** Network of nodes running in the same process, for tests and local development. It can simulate network splits.
+  * Messages are not encrypted and the security settings are ignored, since nothing leaves the process.
+  */
 final class InMemoryNetwork[F[_]] private (
     nodes: Ref[F, Map[Address, Queue[F, Array[Byte]]]],
     blocked: Ref[F, Set[(Address, Address)]],
@@ -13,7 +15,7 @@ final class InMemoryNetwork[F[_]] private (
 )(implicit A: Async[F])
     extends TransportFactory[F] {
 
-  def bind(system: String, host: String, port: Int, onReceive: Array[Byte] => F[Unit]): Resource[F, Transport[F]] =
+  def bind(system: String, host: String, port: Int, security: TransportSecurity, onReceive: Array[Byte] => F[Unit]): Resource[F, Transport[F]] =
     for {
       actualPort <- Resource.eval(if (port == 0) nextPort.getAndUpdate(_ + 1) else A.pure(port))
       address = Address(system, host, actualPort)
