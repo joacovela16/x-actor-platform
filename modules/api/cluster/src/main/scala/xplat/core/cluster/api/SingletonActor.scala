@@ -1,6 +1,7 @@
 package xplat.core.cluster.api
 
 import xplat.core.api.{Behavior, Behaviors, Codec}
+import xplat.core.coordination.LeaseUsage
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -10,11 +11,16 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
   *   messages kept while the singleton moves to another node. Beyond it, the oldest messages are dropped.
   * @param handOverRetryInterval
   *   how often the new node asks the old one to hand over the singleton.
+  * @param lease
+  *   if set, the node must also hold the lease `<system>-singleton-<name>` to run the singleton, and stops it if the lease
+  *   is lost. Protects against two copies when the cluster rules alone fail (e.g. a split with no downing). Needs a
+  *   `LeaseProvider[F]`.
   */
 final case class SingletonConfig(
     role: Option[String] = None,
     bufferSize: Int = 1000,
-    handOverRetryInterval: FiniteDuration = 1.second
+    handOverRetryInterval: FiniteDuration = 1.second,
+    lease: Option[LeaseUsage] = None
 )
 
 /** Definition of an actor that runs on exactly one node of the cluster: the oldest member (with the role, if set). When

@@ -6,6 +6,8 @@ import xplat.core.cluster.api.Decision._
 import xplat.core.cluster.api.SplitBrainStrategy._
 import xplat.core.cluster.api._
 
+import scala.concurrent.duration.{Duration, DurationInt}
+
 class SplitBrainStrategyTest extends AnyFreeSpec with Matchers {
 
   /** Member on port `n`, which became Up in that order: lower `n` is older and has a lower address. */
@@ -19,14 +21,14 @@ class SplitBrainStrategyTest extends AnyFreeSpec with Matchers {
     ClusterState(side ++ others, unreachable = others, leader = None)
 
   /** Decisions of both sides of a split, each taken on its own view. */
-  private def split(strategy: SplitBrainStrategy, a: Set[Member], b: Set[Member]): (Decision, Decision) =
+  private def split(strategy: LocalStrategy, a: Set[Member], b: Set[Member]): (Decision, Decision) =
     (strategy.decide(viewFrom(a, b)), strategy.decide(viewFrom(b, a)))
 
   private val nodes: Map[Int, Member] = (1 to 6).map(n => n -> node(n)).toMap
   private def side(ns: Int*): Set[Member] = ns.map(nodes).toSet
 
   "on a two-way split, both sides never survive" in {
-    val strategies = Seq(KeepMajority(), StaticQuorum(3), KeepOldest(), KeepOldest(downIfAlone = false), KeepReferee(nodes(1).address), DownAllNodes)
+    val strategies = Seq[LocalStrategy](KeepMajority(), StaticQuorum(3), KeepOldest(), KeepOldest(downIfAlone = false), KeepReferee(nodes(1).address), DownAllNodes)
     val splits = Seq(
       side(1, 2, 3) -> side(4, 5),
       side(1, 2) -> side(3, 4),
@@ -106,6 +108,38 @@ class SplitBrainStrategyTest extends AnyFreeSpec with Matchers {
 
     "the referee side goes down too if it is too small" in {
       KeepReferee(nodes(1).address, downAllIfLessThanNodes = 3).decide(viewFrom(side(1, 2), side(3, 4))) shouldBe DownAll
+    }
+  }
+
+  "LeaseMajority" - {
+    val strategy = LeaseMajority("sbr", acquireLeaseDelayForMinority = 3.seconds)
+
+    "the majority tries at once and the minority waits" in {
+      strategy.acquireDelay(viewFrom(side(1, 2, 3), side(4, 5))) shouldBe Duration.Zero
+      strategy.acquireDelay(viewFrom(side(4, 5), side(1, 2, 3))) shouldBe 3.seconds
+    }
+
+    "on an even split, the side with the lowest address counts as the majority" in {
+      strategy.isMajority(viewFrom(side(1, 4), side(2, 3))) shouldBe true
+      strategy.isMajority(viewFrom(side(2, 3), side(1, 4))) shouldBe false
+    }
+
+    "the side that gets the lease survives and the other downs itself" in {
+      val view = viewFrom(side(4, 5), side(1, 2, 3))
+      strategy.decide(view, leaseAcquired = true) shouldBe DownUnreachable
+      strategy.decide(view, leaseAcquired = false) shouldBe DownReachable
+    }
+
+    "with a lease only one owner can hold, exactly one side survives" in {
+      for ((a, b) <- Seq(side(1, 2, 3) -> side(4, 5), side(1, 2) -> side(3, 4), side(5) -> side(1, 2, 3, 4))) {
+        // The side that asks first gets the lease: the one with the shorter delay.
+        val (viewA, viewB) = (viewFrom(a, b), viewFrom(b, a))
+        val aFirst = strategy.acquireDelay(viewA) < strategy.acquireDelay(viewB)
+        val decisions = (strategy.decide(viewA, leaseAcquired = aFirst), strategy.decide(viewB, leaseAcquired = !aFirst))
+        decisions should (equal((DownUnreachable, DownReachable)) or equal((DownReachable, DownUnreachable)))
+        // The bigger side (or the lowest address on a tie) is the one that survives.
+        aFirst shouldBe strategy.isMajority(viewA)
+      }
     }
   }
 

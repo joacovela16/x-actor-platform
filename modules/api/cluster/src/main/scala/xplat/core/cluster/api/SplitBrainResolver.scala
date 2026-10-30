@@ -1,6 +1,6 @@
 package xplat.core.cluster.api
 
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
 /** Downs members when the cluster splits, so that only one side keeps running.
   *
@@ -48,12 +48,19 @@ object Decision {
   case object DownAll extends Decision
 }
 
-/** Picks the surviving side of a split. It must be a pure function of the state, so all nodes decide the same way. */
-trait SplitBrainStrategy {
-  def decide(state: ClusterState): Decision
-}
+/** Picks the surviving side of a split. Either a [[SplitBrainStrategy.LocalStrategy]], decided from the local view
+  * alone, or [[SplitBrainStrategy.LeaseMajority]], which asks an external lease.
+  */
+sealed trait SplitBrainStrategy
 
 object SplitBrainStrategy {
+
+  /** Decides from the local view of the cluster only. It must be a pure function of the state, so the nodes on each side
+    * reach compatible decisions without talking to each other. Extend it to write a custom strategy.
+    */
+  trait LocalStrategy extends SplitBrainStrategy {
+    def decide(state: ClusterState): Decision
+  }
 
   /** Members counted in decisions. Joining and WeaklyUp members do not count, but are downed with their side. */
   private val counted: Set[MemberStatus] = Set(MemberStatus.Up, MemberStatus.Leaving, MemberStatus.Exiting)
@@ -74,7 +81,7 @@ object SplitBrainStrategy {
     * Good default for clusters that change size. If the cluster splits in more than two parts and none has a majority,
     * all of them go down.
     */
-  final case class KeepMajority(role: Option[String] = None) extends SplitBrainStrategy {
+  final case class KeepMajority(role: Option[String] = None) extends LocalStrategy {
     def decide(state: ClusterState): Decision = {
       val s = sides(state, role)
       val (r, u) = (s.reachable.size, s.unreachable.size)
@@ -91,7 +98,7 @@ object SplitBrainStrategy {
     * Good for clusters of fixed size. The cluster must never grow past `quorumSize * 2 - 1` members, or both sides could
     * reach quorum; if it does, all members are downed.
     */
-  final case class StaticQuorum(quorumSize: Int, role: Option[String] = None) extends SplitBrainStrategy {
+  final case class StaticQuorum(quorumSize: Int, role: Option[String] = None) extends LocalStrategy {
     require(quorumSize > 0, s"quorumSize must be positive, got $quorumSize")
 
     def decide(state: ClusterState): Decision = {
@@ -109,7 +116,7 @@ object SplitBrainStrategy {
     *   if the oldest member is cut off alone, its side goes down instead and the others survive. Prevents a single node
     *   from taking the whole cluster down.
     */
-  final case class KeepOldest(downIfAlone: Boolean = true, role: Option[String] = None) extends SplitBrainStrategy {
+  final case class KeepOldest(downIfAlone: Boolean = true, role: Option[String] = None) extends LocalStrategy {
     def decide(state: ClusterState): Decision = {
       val s = sides(state, role)
       if (s.all.isEmpty) Decision.DownAll
@@ -130,7 +137,7 @@ object SplitBrainStrategy {
     * @param downAllIfLessThanNodes
     *   if the referee side has fewer members than this, it goes down too.
     */
-  final case class KeepReferee(referee: Address, downAllIfLessThanNodes: Int = 1) extends SplitBrainStrategy {
+  final case class KeepReferee(referee: Address, downAllIfLessThanNodes: Int = 1) extends LocalStrategy {
     def decide(state: ClusterState): Decision = {
       val s = sides(state, role = None)
       if (!s.reachable.exists(_.address == referee)) Decision.DownReachable
@@ -139,8 +146,39 @@ object SplitBrainStrategy {
     }
   }
 
+  /** The side that takes an external lease survives; the other sides down themselves.
+    *
+    * Always leaves exactly one side, even on even splits or splits in more than two parts, at the cost of depending on the
+    * lease store: if it is unavailable during a split, no side gets the lease and the whole cluster goes down.
+    *
+    * To favour the bigger side, the majority tries at once and the minority waits [[acquireLeaseDelayForMinority]] first.
+    * On an even split, the side with the lowest address counts as the majority. The implementation runs:
+    * {{{
+    * sleep(strategy.acquireDelay(state)) >> lease.acquire.map(strategy.decide(state, _))
+    * }}}
+    * It needs a `LeaseProvider[F]`, given to the `ClusterBuilder` implementation.
+    *
+    * @param leaseName
+    *   name of the lease in the store; the same on every node of the cluster.
+    */
+  final case class LeaseMajority(
+      leaseName: String,
+      acquireLeaseDelayForMinority: FiniteDuration = 2.seconds,
+      role: Option[String] = None
+  ) extends SplitBrainStrategy {
+
+    /** Whether the local side is the majority (or wins the tie on an even split). */
+    def isMajority(state: ClusterState): Boolean = KeepMajority(role).decide(state) == Decision.DownUnreachable
+
+    /** How long the local side waits before trying to take the lease. */
+    def acquireDelay(state: ClusterState): FiniteDuration = if (isMajority(state)) Duration.Zero else acquireLeaseDelayForMinority
+
+    def decide(state: ClusterState, leaseAcquired: Boolean): Decision =
+      if (leaseAcquired) Decision.DownUnreachable else Decision.DownReachable
+  }
+
   /** Downs every member on any split. Safe when restarting the whole cluster is cheaper than any risk of two sides. */
-  case object DownAllNodes extends SplitBrainStrategy {
+  case object DownAllNodes extends LocalStrategy {
     def decide(state: ClusterState): Decision = Decision.DownAll
   }
 }

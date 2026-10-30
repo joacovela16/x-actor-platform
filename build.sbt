@@ -66,9 +66,15 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
     )
   )
 
+lazy val coreCoordination = (project in file("./modules/api/coordination"))
+  .settings(
+    name := "core-coordination",
+    commonsSettings
+  )
+
 lazy val coreCluster = (project in file("./modules/api/cluster"))
-  .aggregate(coreAPI)
-  .dependsOn(coreAPI)
+  .aggregate(coreAPI, coreCoordination)
+  .dependsOn(coreAPI, coreCoordination)
   .settings(
     name := "core-cluster",
     commonsSettings,
