@@ -21,6 +21,26 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
       }
     }
 
+    "the system exposes its name" in withSystem { system =>
+      IO(system.name shouldBe "test")
+    }
+
+    "terminated completes when the actor stops, and the name can be reused" in withSystem { system =>
+      for {
+        first  <- system.spawn[Int]("reused")(b => b.message(_ => b.stop))
+        _      <- first ! 1
+        _      <- first.terminated
+        second <- system.spawn[Int]("reused")(b => b.same)
+      } yield second.path shouldBe "xplat/test/reused"
+    }
+
+    "terminated does not complete while the actor runs" in withSystem { system =>
+      for {
+        ref    <- system.spawn[Int]("alive")(b => b.message(_ => b.same))
+        result <- ref.terminated.timeout(200.millis).attempt
+      } yield result.isLeft shouldBe true
+    }
+
     "rejects a second actor with the same name" in withSystem { system =>
       for {
         _      <- system.spawn[Int]("dup")(b => b.same)

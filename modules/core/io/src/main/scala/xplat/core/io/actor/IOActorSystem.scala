@@ -16,6 +16,8 @@ import scala.language.implicitConversions
 
 final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(implicit A: Async[F]) extends ActorSystem[F] {
 
+  override def name: String = context.name
+
   override def spawn[T](name: String)(builder: BehaviorBuilder[F, T]): F[ActorRef[F, T]] = {
     context.spawn(name)(builder)
   }
@@ -44,7 +46,7 @@ object IOActorSystem {
             name = name,
             behavior = Behaviors[F, Nothing]().same,
             parentPath = Seq("xplat"),
-            notifyShutdown = A.unit,
+            notifyShutdown = (stopped: Deferred[F, Unit]) => stopped.complete(()).void,
             supervisor = supervisor,
             timers = timers
           )
@@ -68,7 +70,8 @@ object IOActorSystem {
   object Command {
     final case class OnMessage[F[_], T](message: T) extends Command[F, T]
     final case class OnSignal[F[_], T](signal: Signal) extends Command[F, T]
-    final case class ChildDown[F[_], T](name: String) extends Command[F, T]
+    /** Sent by a child when it stops. The parent completes `released` once the child name is free. */
+    final case class ChildDown[F[_], T](name: String, released: Deferred[F, Unit]) extends Command[F, T]
     final case class Stop[F[_], T]() extends Command[F, T]
 
     implicit def fromT[F[_], T](value: T): Command[F, T] = OnMessage(value)
@@ -210,8 +213,8 @@ object IOActorSystem {
             onSignal(signal)
           case Stop() =>
             terminate(this)
-          case ChildDown(name) =>
-            children.update(c => c.copy(links = c.links - name)).as(this)
+          case ChildDown(name, released) =>
+            children.update(c => c.copy(links = c.links - name)) >> released.complete(()).as(this)
         }
       }
 
@@ -292,12 +295,13 @@ object IOActorSystem {
 
       def reduce(command: Command[F, T]): F[State[F, T]] = {
         command match {
-          case ChildDown(name) =>
+          case ChildDown(name, released) =>
             children
               .modify { c =>
                 val next = c.copy(links = c.links - name)
                 (next, c.links.contains(name) && next.links.isEmpty)
               }
+              .flatTap(_ => released.complete(()))
               .flatMap(lastChild => if (lastChild) finish.as(this) else A.pure(this))
           case _ =>
             A.pure(this)
@@ -377,7 +381,8 @@ object IOActorSystem {
       channel: Channel[F, Command[F, T]],
       supervisor: Supervisor[F],
       timers: Supervisor[F],
-      children: CRef[F, Children[F]]
+      children: CRef[F, Children[F]],
+      stopped: Deferred[F, Unit]
   )(implicit A: Async[F])
       extends ActorRef[F, T] {
     self =>
@@ -419,19 +424,21 @@ object IOActorSystem {
               name = childName,
               behavior = b(Behaviors[F, A]()),
               parentPath = parentPath :+ self.name,
-              notifyShutdown = push(Command.ChildDown(childName)).attempt.void,
+              notifyShutdown = (released: Deferred[F, Unit]) => push(Command.ChildDown(childName, released)).handleErrorWith(_ => released.complete(()).void),
               supervisor = supervisor,
               timers = timers
             )
           )
           .flatMap { case (child, _) => built.complete(Some(child)).as(child: ActorRef[F, A]) }
-          .onError { case _ => built.complete(None) >> push(Command.ChildDown(childName)).attempt.void }
+          .onError { case _ => built.complete(None) >> Deferred[F, Unit].flatMap(released => push(Command.ChildDown(childName, released))).attempt.void }
 
         reserve >> build
       }
     }
 
     override def path: String = _path
+
+    override def terminated: F[Unit] = stopped.get
 
     override def ask[A](f: Ref[A] => T, timeout: FiniteDuration): F[A] = {
       Dispatcher.sequential[F].use { d =>
@@ -469,7 +476,7 @@ object IOActorSystem {
         name: String,
         behavior: Behavior[F, T],
         parentPath: Seq[String],
-        notifyShutdown: F[Unit],
+        notifyShutdown: Deferred[F, Unit] => F[Unit],
         supervisor: Supervisor[F],
         timers: Supervisor[F]
     )(implicit A: Async[F]): F[(Actor[F, T], Context[F, T])] = {
@@ -478,7 +485,8 @@ object IOActorSystem {
         // Unbounded so an actor can send to itself (pipe, unstash, timers) without waiting on its own loop.
         channel <- Channel.unbounded[F, Command[F, T]]
         children <- CRef.of[F, Children[F]](Children(Map.empty, closed = false))
-        actor = Actor[F, T](name, parentPath, channel, supervisor, timers, children)
+        stopped <- Deferred[F, Unit]
+        actor = Actor[F, T](name, parentPath, channel, supervisor, timers, children, stopped)
         logLib <- Slf4jLogger.fromName[F](actor.path)
         log = IOLogger.build(logLib)
         context = IOContext[F, T](actor, log)
@@ -496,7 +504,7 @@ object IOActorSystem {
         _ <- supervisor.supervise(
           channel.stream
             .evalScan[F, State[F, T]](initState)(_ reduce _)
-            .onFinalize(context.log.debug(s"Actor ${context.path} is down") >> notifyShutdown)
+            .onFinalize(context.log.debug(s"Actor ${context.path} is down") >> notifyShutdown(stopped))
             .compile
             .drain
         )
