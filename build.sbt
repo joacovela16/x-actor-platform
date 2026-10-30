@@ -126,6 +126,14 @@ lazy val ioCluster = (project in file("./modules/core/io-cluster"))
     )
   )
 
+lazy val ioSharding = (project in file("./modules/core/io-sharding"))
+  .aggregate(ioCluster, coreSharding)
+  .dependsOn(ioCluster % "compile->compile;test->test", coreSharding)
+  .settings(
+    name := "io-sharding",
+    commonsSettings
+  )
+
 lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
   .aggregate(coreAPI, corePersistence, sqlLibCore, ioActor)
   .dependsOn(coreAPI, corePersistence, sqlLibCore, ioActor)
@@ -155,8 +163,8 @@ lazy val optLibCore = (project in file("./modules/library/optimizer"))
   )
 
 lazy val root = (project in file("."))
-  .aggregate(sqlitePersistence, optLibCore, coreSharding)
-  .dependsOn(sqlitePersistence, optLibCore, coreSharding)
+  .aggregate(sqlitePersistence, optLibCore, coreSharding, ioSharding)
+  .dependsOn(sqlitePersistence, optLibCore, coreSharding, ioSharding)
   .settings(
     name := "x-actor-platform",
     commonsSettings
