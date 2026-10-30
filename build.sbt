@@ -102,6 +102,18 @@ lazy val ioActor = (project in file("./modules/core/io"))
     )
   )
 
+lazy val ioCoordination = (project in file("./modules/core/io-coordination"))
+  .aggregate(coreCoordination)
+  .dependsOn(coreCoordination)
+  .settings(
+    name := "io-coordination",
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.catsEffects,
+      Dependencies.Compile.catsFS2IO
+    )
+  )
+
 lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
   .aggregate(coreAPI, corePersistence, sqlLibCore, ioActor)
   .dependsOn(coreAPI, corePersistence, sqlLibCore, ioActor)
