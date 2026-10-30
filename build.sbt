@@ -111,9 +111,57 @@ lazy val ioSharding = (project in file("./modules/core/io-sharding"))
     commonsSettings
   )
 
+lazy val persistenceTestkit = (project in file("./modules/extensions/persistence/testkit"))
+  .dependsOn(ioActor, ioCoordination)
+  .settings(
+    name := "xplat-persistence-testkit",
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % Dependencies.Versions.scalaTest,
+      "org.typelevel" %% "cats-effect-testing-scalatest" % Dependencies.Versions.catTest
+    )
+  )
+
+lazy val jdbcPersistence = (project in file("./modules/extensions/persistence/jdbc"))
+  .dependsOn(corePersistence, ioCoordination)
+  .settings(
+    name := "xplat-persistence-jdbc",
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.doobieCore,
+      Dependencies.Compile.doobieHikari
+    )
+  )
+
+/** Settings of a database module: tests run against the shared contracts in the testkit. */
+def databaseModule(id: String, moduleName: String, driver: ModuleID) =
+  Project(id, file(s"./modules/extensions/persistence/$moduleName"))
+    .dependsOn(jdbcPersistence, persistenceTestkit % Test)
+    .settings(
+      name := s"xplat-persistence-$moduleName",
+      commonsSettings,
+      libraryDependencies += driver,
+      Test / fork := true,
+      Test / parallelExecution := false
+    )
+
+lazy val sqlitePersistence = databaseModule("sqlitePersistence", "sqlite", Dependencies.Compile.sqliteDriver)
+lazy val postgresPersistence = databaseModule("postgresPersistence", "postgres", Dependencies.Compile.postgresDriver)
+lazy val mariadbPersistence = databaseModule("mariadbPersistence", "mariadb", Dependencies.Compile.mariadbDriver)
+
+lazy val mongoPersistence = (project in file("./modules/extensions/persistence/mongodb"))
+  .dependsOn(corePersistence, ioCoordination, persistenceTestkit % Test)
+  .settings(
+    name := "xplat-persistence-mongodb",
+    commonsSettings,
+    libraryDependencies += Dependencies.Compile.mongoDriver,
+    Test / fork := true,
+    Test / parallelExecution := false
+  )
+
 lazy val root = (project in file("."))
-  .aggregate(coreSharding, ioSharding)
-  .dependsOn(coreSharding, ioSharding)
+  .aggregate(coreSharding, ioSharding, sqlitePersistence, postgresPersistence, mariadbPersistence, mongoPersistence)
+  .dependsOn(coreSharding, ioSharding, sqlitePersistence, postgresPersistence, mariadbPersistence, mongoPersistence)
   .settings(
     name := "x-actor-platform",
     commonsSettings

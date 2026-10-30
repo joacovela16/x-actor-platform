@@ -23,6 +23,9 @@ object Dependencies {
 
     val quill: String = "4.8.0"
     val sqliteDriver: String = "3.49.1.0"
+    val postgresDriver: String = "42.7.4"
+    val mariadbDriver: String = "3.4.1"
+    val mongoDriver: String = "5.1.4"
     val mysqlDriver: String = "8.0.33"
     val h2Driver: String = "2.3.232"
 
@@ -56,6 +59,9 @@ object Dependencies {
     val doobieCore = "org.tpolecat" %% "doobie-core" % Versions.doobie
     val doobieHikari = "org.tpolecat" %% "doobie-hikari" % Versions.doobie // HikariCP transactor.
     val sqliteDriver = "org.xerial" % "sqlite-jdbc" % Versions.sqliteDriver
+    val postgresDriver = "org.postgresql" % "postgresql" % Versions.postgresDriver
+    val mariadbDriver = "org.mariadb.jdbc" % "mariadb-java-client" % Versions.mariadbDriver
+    val mongoDriver = "org.mongodb" % "mongodb-driver-sync" % Versions.mongoDriver
     val mysqlDriver = "mysql" % "mysql-connector-java" % Versions.mysqlDriver
     val h2Driver = "com.h2database" % "h2" % Versions.h2Driver
 
