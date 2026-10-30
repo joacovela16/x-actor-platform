@@ -66,6 +66,25 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
     )
   )
 
+lazy val coreCluster = (project in file("./modules/api/cluster"))
+  .aggregate(coreAPI)
+  .dependsOn(coreAPI)
+  .settings(
+    name := "core-cluster",
+    commonsSettings,
+    libraryDependencies ++= Seq(
+      Dependencies.Compile.catsFS2
+    )
+  )
+
+lazy val coreSharding = (project in file("./modules/api/sharding"))
+  .aggregate(coreAPI, coreCluster)
+  .dependsOn(coreAPI, coreCluster)
+  .settings(
+    name := "core-sharding",
+    commonsSettings
+  )
+
 lazy val ioActor = (project in file("./modules/core/io"))
   .aggregate(coreAPI, corePersistence)
   .dependsOn(coreAPI, corePersistence)
@@ -106,8 +125,8 @@ lazy val optLibCore = (project in file("./modules/library/optimizer"))
   )
 
 lazy val root = (project in file("."))
-  .aggregate(sqlitePersistence, optLibCore)
-  .dependsOn(sqlitePersistence, optLibCore)
+  .aggregate(sqlitePersistence, optLibCore, coreSharding)
+  .dependsOn(sqlitePersistence, optLibCore, coreSharding)
   .settings(
     name := "x-actor-platform",
     commonsSettings
