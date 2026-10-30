@@ -10,12 +10,17 @@ val commonsSettings = Seq(
     Dependencies.Compile.pprint,
     Dependencies.Compile.quicklens,
     Dependencies.Compile.catsSelfLogger,
-    Dependencies.Compile.logbackClassic,
     Dependencies.Compile.cats,
     Dependencies.Compile.catsMtl,
+    // Logging backend: the libraries only log through SLF4J, so the backend is Provided. It is available for
+    // compiling, tests and `run`, but is not passed on to projects that depend on these modules.
+    Dependencies.Compile.logbackClassic % Provided,
     Dependencies.Test.scalaTest,
     Dependencies.Test.catTest
-  )
+  ),
+  // Put Provided dependencies on the classpath of `run` and `runMain`, so the demo mains still log.
+  Compile / run := Defaults.runTask(Compile / fullClasspath, Compile / run / mainClass, Compile / run / runner).evaluated,
+  Compile / runMain := Defaults.runMainTask(Compile / fullClasspath, Compile / run / runner).evaluated
 )
 
 lazy val exprLibCore = (project in file("./modules/library/expr/core"))
