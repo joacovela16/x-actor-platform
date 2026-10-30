@@ -23,29 +23,6 @@ val commonsSettings = Seq(
   Compile / runMain := Defaults.runMainTask(Compile / fullClasspath, Compile / run / runner).evaluated
 )
 
-lazy val exprLibCore = (project in file("./modules/library/expr/core"))
-  .settings(
-    name := "expr-lib-core",
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.scalaReflect,
-      Dependencies.Compile.catsFS2,
-      Dependencies.Compile.catsEffects
-    ),
-    commonsSettings
-  )
-
-lazy val sqlLibCore = (project in file("./modules/library/expr/sql"))
-  .aggregate(exprLibCore)
-  .dependsOn(exprLibCore)
-  .settings(
-    name := "sql-lib-core",
-    commonsSettings,
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.doobieCore,
-      Dependencies.Compile.doobieHikari
-    )
-  )
-
 lazy val coreAPI = (project in file("./modules/api/core"))
   .settings(
     name := "core-api",
@@ -134,37 +111,9 @@ lazy val ioSharding = (project in file("./modules/core/io-sharding"))
     commonsSettings
   )
 
-lazy val sqlitePersistence = (project in file("./modules/extensions/persistence/sqlite"))
-  .aggregate(coreAPI, corePersistence, sqlLibCore, ioActor)
-  .dependsOn(coreAPI, corePersistence, sqlLibCore, ioActor)
-  .settings(
-    name := "xplat-sqlite-persistence",
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.sqliteDriver
-    ),
-    commonsSettings
-  )
-
-lazy val optLibCore = (project in file("./modules/library/optimizer"))
-  .enablePlugins(spray.boilerplate.BoilerplatePlugin)
-  .aggregate(coreAPI, ioActor)
-  .dependsOn(coreAPI, ioActor)
-  .settings(
-    name := "optimizer",
-    libraryDependencies ++= Seq(
-      Dependencies.Compile.catsFS2,
-      Dependencies.Compile.cats,
-      Dependencies.Compile.catsEffects,
-      Dependencies.Compile.sourcecode,
-      Dependencies.Compile.catsFree,
-      "org.scalanlp" %% "breeze" % "2.1.0"
-    ),
-    commonsSettings
-  )
-
 lazy val root = (project in file("."))
-  .aggregate(sqlitePersistence, optLibCore, coreSharding, ioSharding)
-  .dependsOn(sqlitePersistence, optLibCore, coreSharding, ioSharding)
+  .aggregate(coreSharding, ioSharding)
+  .dependsOn(coreSharding, ioSharding)
   .settings(
     name := "x-actor-platform",
     commonsSettings

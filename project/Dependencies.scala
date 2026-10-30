@@ -32,7 +32,6 @@ object Dependencies {
     val scalaTest: String = "3.2.19"
     val catTest: String = "1.6.0"
     val pprint: String = "0.9.0"
-    val sourcecode: String = "0.4.2"
 
     val doobie: String = "1.0.0-RC9"
 
@@ -41,7 +40,6 @@ object Dependencies {
   object Compile {
 
     val pprint = "com.lihaoyi" %% "pprint" % Versions.pprint
-    val scalaReflect = "org.scala-lang" % "scala-reflect" % Versions.scalaVersion
 
     val cats = "org.typelevel" %% "cats-core" % Versions.cats
     val catsEffects = "org.typelevel" %% "cats-effect" % Versions.catsEffects
@@ -49,12 +47,10 @@ object Dependencies {
     val catsFS2IO = "co.fs2" %% "fs2-io" % Versions.catsFS2
     val catsMtl = "org.typelevel" %% "cats-mtl" % Versions.catsMtl
     val catsLogger = "org.typelevel" %% "log4cats-core" % Versions.catsLogger
-    val catsFree = "org.typelevel" %% "cats-free" % Versions.cats
 
     val catsSelfLogger = "org.typelevel" %% "log4cats-slf4j" % Versions.catsSelfLogger
 
     val quicklens = "com.softwaremill.quicklens" %% "quicklens" % Versions.quicklens
-    val sourcecode = "com.lihaoyi" %% "sourcecode" % Versions.sourcecode
 
     // database
     val doobieCore = "org.tpolecat" %% "doobie-core" % Versions.doobie
