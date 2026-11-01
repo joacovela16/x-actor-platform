@@ -4,6 +4,7 @@ ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
 // The version comes from git tags (sbt-ci-release / sbt-dynver): tag v0.1.0 publishes 0.1.0, untagged commits publish
 // snapshots.
 ThisBuild / organization := "io.github.joacovela16"
+ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organizationName := "x-actor-platform"
 ThisBuild / homepage := Some(url("https://github.com/joacovela16/x-actor-platform"))
 ThisBuild / licenses := List("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt"))

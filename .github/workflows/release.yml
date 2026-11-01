@@ -18,6 +18,22 @@ jobs:
           java-version: 17
           cache: sbt
       - uses: sbt/setup-sbt@v1
+      # Fails early, naming the missing secrets, instead of a gpg error later. Values are never printed.
+      - name: Check secrets
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+        run: |
+          missing=0
+          for name in PGP_SECRET PGP_PASSPHRASE SONATYPE_USERNAME SONATYPE_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "::error::secret $name is empty or not visible to this workflow"; missing=1; fi
+          done
+          if [ -n "$PGP_SECRET" ] && ! echo "$PGP_SECRET" | base64 -d 2>/dev/null | grep -q "BEGIN PGP PRIVATE KEY BLOCK"; then
+            echo "::error::PGP_SECRET is not a base64-encoded private key"; missing=1
+          fi
+          exit $missing
       - run: sbt ci-release
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
