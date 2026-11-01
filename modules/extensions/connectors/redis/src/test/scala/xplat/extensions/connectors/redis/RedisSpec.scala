@@ -3,7 +3,6 @@ package xplat.extensions.connectors.redis
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource, Ref => CRef}
 import scala.concurrent.duration._
-import xplat.core.connectors.Codecs.utf8
 import xplat.core.connectors._
 import xplat.extensions.persistence.testkit.Containers
 

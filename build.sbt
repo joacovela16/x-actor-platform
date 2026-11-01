@@ -1,5 +1,9 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
+// One forked test module at a time: those are the database and broker modules, each with its own container, so small
+// machines such as CI runners never run several containers at once.
+Global / concurrentRestrictions += Tags.limit(Tags.ForkedTestGroup, 1)
+
 ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
 // The version comes from git tags (sbt-ci-release / sbt-dynver): tag v0.1.0 publishes 0.1.0, untagged commits publish
 // snapshots.
@@ -198,6 +202,14 @@ lazy val activemqConnector = connectorModule(
 )
 lazy val redisConnector = connectorModule("redisConnector", "redis", Seq(Dependencies.Compile.redis4cats))
 
+lazy val circeCodec = (project in file("./modules/extensions/codec/circe"))
+  .dependsOn(coreAPI)
+  .settings(
+    name := "xplat-circe",
+    commonsSettings,
+    libraryDependencies ++= Seq(Dependencies.Compile.circeCore, Dependencies.Compile.circeParser, Dependencies.Compile.circeGeneric % Test)
+  )
+
 lazy val di = (project in file("./modules/core/di"))
   .settings(
     name := "xplat-di",
@@ -207,7 +219,7 @@ lazy val di = (project in file("./modules/core/di"))
 
 /** Runnable examples, the same as in the README. Not published. */
 lazy val examples = (project in file("./modules/examples"))
-  .dependsOn(ioSharding, sqlitePersistence, postgresPersistence, di, kafkaConnector, activemqConnector, redisConnector)
+  .dependsOn(ioSharding, sqlitePersistence, postgresPersistence, di, kafkaConnector, activemqConnector, redisConnector, circeCodec)
   .settings(
     name := "xplat-examples",
     commonsSettings,
@@ -235,6 +247,7 @@ lazy val root = (project in file("."))
     mongoPersistence,
     di,
     coreConnectors,
+    circeCodec,
     kafkaConnector,
     activemqConnector,
     redisConnector,

@@ -2,8 +2,7 @@ package xplat.extensions.connectors.activemq
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import jakarta.jms.ConnectionFactory
-import xplat.core.connectors.Codecs.utf8
+import jakarta.jms.{ConnectionFactory, Session}
 import xplat.core.connectors._
 import xplat.extensions.persistence.testkit.Containers
 
@@ -17,7 +16,15 @@ object ActiveMQSpec {
         Some(
           Containers
             .container(image, 61616, env) { c =>
-              IO.blocking(factoryFor(url(c)).createConnection().close())
+              // A real round trip: the Classic client only talks to the broker when a session is created, and Docker
+              // accepts connections on the published port before the broker listens.
+              IO.blocking {
+                val connection = factoryFor(url(c)).createConnection()
+                try {
+                  connection.start()
+                  connection.createSession(false, Session.AUTO_ACKNOWLEDGE).close()
+                } finally connection.close()
+              }
             }
             .allocated
             .unsafeRunSync()

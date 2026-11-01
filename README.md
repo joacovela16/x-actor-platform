@@ -61,6 +61,7 @@ If you only need local actors, depend on `xplat-io-actor` instead of `xplat-io-s
 | `xplat-activemq` | `ActiveMQ.consumer`, `ActiveMQ.publisher` over Jakarta JMS; add `activemq-client` (Classic) or `artemis-jakarta-client` (Artemis) | core-connectors |
 | `xplat-redis` | `RedisStreams.consumer`, `RedisStreams.publisher` with consumer groups (redis4cats) | core-connectors |
 | **Other** | | |
+| `xplat-circe` | `Codec.fromJson[T]` with circe (`import xplat.codec.circe._`) | core-api, circe |
 | `xplat-di` | `Container`, `Key`, `Services`: dependency injection with `Resource`, multiple keys and scopes | cats-effect |
 | **Storage** | | |
 | `xplat-persistence-jdbc` | `JdbcPersistence`: journal and lease store on any SQL database (doobie + HikariCP) | core-persistence, io-coordination |
@@ -192,14 +193,8 @@ SqlitePersistence.resource[IO](Paths.get("accounts.db")).use { db =>
 Besides `persist` and `compress`, `Effects` has `stash` / `unstash` (hold commands until the entity is ready) and
 `ignore`. By default a persistent actor stops after one minute without messages (`Persistence.Config(shutdownOnIdle)`).
 
-State and events are stored as bytes through a `Codec[A, Array[Byte]]`, so you can use any serialization library:
-
-```scala
-implicit val longCodec: Codec[Long, Array[Byte]] = new Codec[Long, Array[Byte]] {
-  def encode(from: Long): Either[CodecError, Array[Byte]] = Right(from.toString.getBytes(UTF_8))
-  def decode(to: Array[Byte]): Either[CodecError, Long] = new String(to, UTF_8).toLongOption.toRight(CodecError("not a number"))
-}
-```
+State and events are stored as bytes through a `Codec.Bytes[T]` (`Codec[T, Array[Byte]]`). Basic types already have
+one; see [Codecs](#codecs) for text and JSON.
 
 #### Storage backends
 
@@ -421,6 +416,35 @@ ClusterConfig(
 )
 ```
 
+### Codecs
+
+Journals, cluster messages and brokers store bytes. `Codec` builds those codecs from text or JSON, so you rarely write
+bytes by hand:
+
+```scala
+import xplat.core.api.Codec
+
+// String, Int, Long, Double, Boolean, BigDecimal, UUID and Unit already have one, written as readable text.
+Codec[Long, Array[Byte]] // "42"
+
+// From text conversions
+final case class OrderId(value: String)
+implicit val orderId: Codec.Bytes[OrderId] = Codec.fromString[OrderId](_.value)(s => Right(OrderId(s)))
+
+// JSON with circe (module xplat-circe)
+import io.circe.generic.semiauto.deriveCodec
+import xplat.codec.circe._
+
+final case class Order(id: String, amount: BigDecimal)
+implicit val orderJson: io.circe.Codec[Order] = deriveCodec
+implicit val order: Codec.Bytes[Order] = Codec.fromJson[Order]
+
+// Reuse a format for another type
+val cents: Codec.Bytes[BigDecimal] = Codec.long.imap(c => BigDecimal(c) / 100)(d => (d * 100).toLongExact)
+```
+
+Messages that carry a reply `Ref` need the node's `RefResolver` (see the cart codec in [Sharding](#sharding)).
+
 ### Messaging connectors
 
 Each connector reads a topic, queue or stream and delivers every message to a `Sink`, usually an actor asked through
@@ -470,7 +494,7 @@ RedisStreams.publisher[IO, String]("redis://localhost", "invoices", maxLength = 
 - **Sharded entities.** Deliver to an entity with `Sink(m => sharding.entityRefFor(OrderKey, m.key.get).ask[Done](Process(m.value, _)).void)`;
   `Done` has its codec.
 - **Payloads.** Messages are bytes through a `Codec[T, Array[Byte]]`, like everywhere else in the library;
-  `Codecs.utf8` covers text.
+  `Codec.utf8` covers text; see [Codecs](#codecs) for the rest.
 
 ### Dependency injection
 

@@ -375,7 +375,6 @@ object ConnectorsExample {
   import cats.effect.{IO, Resource}
   import xplat.core.api._
   import xplat.core.connectors._
-  import xplat.core.connectors.Codecs.utf8
   import xplat.extensions.connectors.activemq.ActiveMQ
   import xplat.extensions.connectors.kafka.Kafka
   import xplat.extensions.connectors.redis.RedisStreams

@@ -2,7 +2,6 @@ package xplat.extensions.connectors.kafka
 
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Resource}
-import xplat.core.connectors.Codecs.utf8
 import xplat.core.connectors._
 import xplat.extensions.persistence.testkit.Containers
 
