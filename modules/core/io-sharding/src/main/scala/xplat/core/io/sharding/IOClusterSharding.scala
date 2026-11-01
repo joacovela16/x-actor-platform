@@ -25,6 +25,7 @@ final class IOClusterSharding[F[_]] private (
     cluster: IOCluster[F],
     singletons: ClusterSingleton[F],
     journals: Option[JournalBuilder[F]],
+    replicas: CoordinatorStore.Replicas[F],
     regions: Ref[F, Map[String, Deferred[F, Region[F, _]]]],
     supervisor: Supervisor[F],
     log: Log4Cats[F]
@@ -52,7 +53,9 @@ final class IOClusterSharding[F[_]] private (
       SingletonConfig(role = config.role, handOverRetryInterval = config.retryInterval)
     )(coordinatorCodec)
     for {
-      store  <- journals.fold(A.pure(CoordinatorStore.inMemory[F]))(CoordinatorStore.journaled[F](_, typeName))
+      store <- journals.fold(CoordinatorStore.replicated[F](cluster, replicas, typeName, config.retryInterval * 2))(
+        CoordinatorStore.journaled[F](_, typeName)
+      )
       proxy  <- singletons.init(coordinator(store))
       region <- Region[F, T](cluster, entity, proxy, supervisor, log)
       _      <- region.start
@@ -89,8 +92,9 @@ object IOClusterSharding {
     * shards to other nodes.
     *
     * @param journals
-    *   where coordinators keep their state (allocations and remembered entities). Without it the state lives in memory
-    *   and is rebuilt from the regions, so remembered entities are lost if the whole cluster stops.
+    *   where coordinators keep their state (allocations and remembered entities), so it survives the whole cluster
+    *   stopping. Without it the state is replicated on the members: it survives the coordinator moving to another
+    *   node, but remembered entities are lost if every node stops.
     */
   def builder[F[_]](journals: Option[JournalBuilder[F]] = None)(implicit A: Async[F]): ClusterShardingBuilder[F] =
     cluster =>
@@ -100,7 +104,8 @@ object IOClusterSharding {
         singletons <- IOClusterSingleton.builder[F].build(cluster)
         supervisor <- Supervisor[F](await = false)
         regions    <- Resource.eval(Ref.of[F, Map[String, Deferred[F, Region[F, _]]]](Map.empty))
-        sharding = new IOClusterSharding[F](io, singletons, journals, regions, supervisor, log)
+        replicas   <- Resource.eval(CoordinatorStore.Replicas[F](io))
+        sharding = new IOClusterSharding[F](io, singletons, journals, replicas, regions, supervisor, log)
         _ <- Resource.onFinalize(sharding.stopAll)
       } yield sharding
 }

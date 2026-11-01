@@ -6,7 +6,8 @@ import cats.effect.syntax.all._
 import cats.implicits._
 import com.comcast.ip4s.{Host, Port, SocketAddress}
 import fs2.io.net.{Network, Socket}
-import xplat.core.io.net.{BinReader, BinWriter, Frames}
+import xplat.core.api.net.TransportSecurity
+import xplat.core.io.net.{BinReader, BinWriter, Frames, SecureChannel}
 
 import scala.concurrent.duration._
 
@@ -41,19 +42,41 @@ private object LeaseProtocol {
 
 /** Serves a [[LeaseStore]] over TCP, so nodes in different processes can share leases. Run it outside the cluster it
   * coordinates: if it ran inside, a split could leave it on one side only.
+  *
+  * With [[TransportSecurity]] the connections use mutual TLS and/or must prove they know the shared secret before any
+  * request is served (see [[SecureChannel]]). Clients need the same settings.
   */
 object LeaseServer {
   import LeaseProtocol._
 
   /** Starts the server. Port 0 picks a free port; the bound address is returned. */
-  def bind[F[_]](host: Host, port: Port, store: LeaseStore[F])(implicit A: Async[F]): Resource[F, SocketAddress[Host]] = {
+  def bind[F[_]](host: Host, port: Port, store: LeaseStore[F], security: TransportSecurity = TransportSecurity())(implicit
+      A: Async[F]
+  ): Resource[F, SocketAddress[Host]] = {
     val network = Network.forAsync[F]
     for {
-      supervisor        <- Supervisor[F](await = false)
+      channel    <- Resource.eval(SecureChannel[F](network, security))
+      supervisor <- Supervisor[F](await = false)
       server     <- network.serverResource(Some(host), Some(port))
       (address, clients) = server
       // Each client is served inside the stream: a socket is closed as soon as its stream element goes out of scope.
-      _ <- Resource.eval(supervisor.supervise(clients.map(socket => fs2.Stream.eval(serve(socket, store))).parJoinUnbounded.compile.drain))
+      _ <- Resource.eval(
+        supervisor.supervise(
+          clients
+            .map(socket =>
+              fs2.Stream.eval(
+                channel
+                  .server(socket)
+                  .use(secured => channel.accept(secured)(_ => A.pure(Array.emptyByteArray)).flatMap(_.traverse_(_ => serve(secured, store))))
+                  .attempt
+                  .void
+              )
+            )
+            .parJoinUnbounded
+            .compile
+            .drain
+        )
+      )
     } yield SocketAddress[Host](address.host, address.port)
   }
 
@@ -83,6 +106,7 @@ object LeaseServer {
   */
 final class RemoteLeaseStore[F[_]] private (
     server: SocketAddress[Host],
+    channel: SecureChannel[F],
     supervisor: Supervisor[F],
     connection: Ref[F, Option[RemoteLeaseStore.Connection[F]]],
     connecting: Semaphore[F],
@@ -105,15 +129,16 @@ final class RemoteLeaseStore[F[_]] private (
           run = Network
             .forAsync[F]
             .client(server)
+            .flatMap(channel.client)
             .use { socket =>
-              ready.complete(Right(())) >>
+              channel.connect(socket, Array.emptyByteArray) >> ready.complete(Right(())) >>
                 A.race(
                   fs2.Stream.fromQueueUnterminated(outbox).evalMap(Frames.write(socket, _)).compile.drain,
                   Frames.read(socket).evalMap(bytes => complete(pending, decodeResponse(bytes))).compile.drain
                 ).void
             }
             .guarantee(
-              ready.complete(Left(new java.io.IOException(s"cannot connect to lease server $server"))).void >>
+              ready.complete(Left(new java.io.IOException(s"cannot connect to lease server $server or it rejected this client"))).void >>
                 connection.set(None) >> failAll(pending) >> closed.complete(()).void
             )
           _ <- connection.set(Some(conn))
@@ -148,11 +173,13 @@ final class RemoteLeaseStore[F[_]] private (
 object RemoteLeaseStore {
   private final case class Connection[F[_]](outbox: Queue[F, Array[Byte]], pending: Ref[F, Map[Long, Deferred[F, Either[Throwable, LeaseProtocol.Response]]]])
 
-  def apply[F[_]](server: SocketAddress[Host])(implicit A: Async[F]): Resource[F, LeaseStore[F]] =
+  /** Client of the [[LeaseServer]] at `server`, with the same security settings as the server. */
+  def apply[F[_]](server: SocketAddress[Host], security: TransportSecurity = TransportSecurity())(implicit A: Async[F]): Resource[F, LeaseStore[F]] =
     for {
+      channel    <- Resource.eval(SecureChannel[F](Network.forAsync[F], security))
       supervisor <- Supervisor[F](await = false)
       connection <- Resource.eval(Ref.of[F, Option[Connection[F]]](None))
       connecting <- Resource.eval(Semaphore[F](1))
       nextId     <- Resource.eval(Ref.of[F, Long](0L))
-    } yield new RemoteLeaseStore[F](server, supervisor, connection, connecting, nextId)
+    } yield new RemoteLeaseStore[F](server, channel, supervisor, connection, connecting, nextId)
 }

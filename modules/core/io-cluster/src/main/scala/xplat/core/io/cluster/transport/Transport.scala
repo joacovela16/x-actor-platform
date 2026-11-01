@@ -1,7 +1,8 @@
 package xplat.core.io.cluster.transport
 
 import cats.effect.kernel.Resource
-import xplat.core.cluster.api.{Address, TransportSecurity}
+import xplat.core.api.net.TransportSecurity
+import xplat.core.cluster.api.Address
 
 /** Moves bytes between cluster nodes. Messages between two nodes arrive in the order they were sent. */
 trait Transport[F[_]] {

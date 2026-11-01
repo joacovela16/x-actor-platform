@@ -1,16 +1,23 @@
 package xplat.core.io.sharding
 
 import cats.effect.kernel.{Async, Ref}
+import cats.effect.syntax.all._
 import cats.implicits._
-import xplat.core.cluster.api.Address
+import xplat.core.cluster.api.{Address, MemberStatus}
+import xplat.core.io.cluster.IOCluster
 import xplat.core.io.net.{BinReader, BinWriter}
 import xplat.core.persistence.api.journal.Shard
 import xplat.core.persistence.api.{Journal, JournalBuilder}
+
+import scala.concurrent.duration.FiniteDuration
 
 /** Where the coordinator keeps its state, so it survives the coordinator moving or the whole cluster restarting. */
 private[sharding] trait CoordinatorStore[F[_]] {
   def load: F[CoordinatorStore.Data]
   def save(before: CoordinatorStore.Data, after: CoordinatorStore.Data): F[Unit]
+
+  /** Called on every coordinator tick with the current state, for stores that need to catch up (e.g. new members). */
+  def tick(current: CoordinatorStore.Data): F[Unit]
 }
 
 private[sharding] object CoordinatorStore {
@@ -22,10 +29,95 @@ private[sharding] object CoordinatorStore {
     val empty: Data = Data(Map.empty, Map.empty)
   }
 
-  /** Keeps nothing: the coordinator rebuilds its state from what the regions report. */
-  def inMemory[F[_]](implicit A: Async[F]): CoordinatorStore[F] = new CoordinatorStore[F] {
-    def load: F[Data] = A.pure(Data.empty)
-    def save(before: Data, after: Data): F[Unit] = A.unit
+  /** Keeps a copy of the state on every member that runs sharding, so a coordinator that moves to another node takes
+    * over the allocations and remembered entities. Each change gets a higher version; a new coordinator asks every
+    * member for its copy and keeps the newest. Members that join later get the state on the next tick.
+    *
+    * It does not survive the whole cluster stopping; use [[journaled]] for that.
+    */
+  def replicated[F[_]](cluster: IOCluster[F], replicas: Replicas[F], typeName: String, askTimeout: FiniteDuration)(implicit A: Async[F]): F[CoordinatorStore[F]] =
+    (Ref.of[F, Long](0L), Ref.of[F, Set[Address]](Set.empty)).mapN { (version, informed) =>
+      new CoordinatorStore[F] {
+
+        private def peers: F[Set[Address]] =
+          cluster.state.map(_.members.collect { case m if m.status != MemberStatus.Down && m.status != MemberStatus.Removed => m.address })
+
+        private def push(to: Set[Address], v: Long, data: Data): F[Unit] =
+          to.toList.traverse_(a => cluster.remoting.send(a, Replicas.endpoint, Replicas.encodePut(typeName, v, data))) >> informed.update(_ ++ to)
+
+        def load: F[Data] =
+          for {
+            members <- peers
+            copies <- members.toList.parTraverseN(16)(a =>
+              cluster.remoting.request(a, Replicas.endpoint, Replicas.encodeGet(typeName), askTimeout).map(Replicas.decodeCopy).attempt.map(_.toOption.flatten)
+            )
+            local <- replicas.get(typeName)
+            newest = (local.toList ++ copies.flatten).maxByOption(_._1)
+            _ <- version.set(newest.fold(0L)(_._1))
+          } yield newest.fold(Data.empty)(_._2)
+
+        def save(before: Data, after: Data): F[Unit] =
+          A.whenA(before != after) {
+            for {
+              v       <- version.updateAndGet(_ + 1)
+              _       <- replicas.put(typeName, v, after)
+              members <- peers
+              _       <- informed.set(Set.empty)
+              _       <- push(members - cluster.self.address, v, after)
+            } yield ()
+          }
+
+        def tick(current: Data): F[Unit] =
+          for {
+            members <- peers
+            known   <- informed.get
+            missing = members - cluster.self.address -- known
+            v <- version.get
+            _ <- A.whenA(missing.nonEmpty && v > 0)(push(missing, v, current))
+          } yield ()
+      }
+    }
+
+  /** Copies of the coordinator state of every entity type, kept on this node. */
+  final class Replicas[F[_]] private (copies: Ref[F, Map[String, (Long, Data)]])(implicit A: Async[F]) {
+
+    def get(typeName: String): F[Option[(Long, Data)]] = copies.get.map(_.get(typeName))
+
+    /** Keeps the copy if it is newer than the one held. */
+    def put(typeName: String, version: Long, data: Data): F[Unit] =
+      copies.update(c => if (c.get(typeName).exists(_._1 >= version)) c else c.updated(typeName, (version, data)))
+  }
+
+  object Replicas {
+    val endpoint: String = "/system/sharding/coordinator-state"
+
+    /** Creates the replicas of this node and serves them to the coordinators. */
+    def apply[F[_]](cluster: IOCluster[F])(implicit A: Async[F]): F[Replicas[F]] =
+      Ref.of[F, Map[String, (Long, Data)]](Map.empty).map(new Replicas[F](_)).flatTap { replicas =>
+        cluster.remoting.on(endpoint) { bytes =>
+          A.delay(decodePut(bytes)).flatMap { case (typeName, v, data) => replicas.put(typeName, v, data) }
+        } >> cluster.remoting.onRequest(endpoint) { bytes =>
+          A.delay(BinReader(bytes).string()).flatMap(replicas.get).map(encodeCopy)
+        }
+      }
+
+    def encodeGet(typeName: String): Array[Byte] = BinWriter().string(typeName).result()
+
+    def encodePut(typeName: String, version: Long, data: Data): Array[Byte] =
+      BinWriter().string(typeName).long(version).bytes(encodeData(data)).result()
+
+    def decodePut(bytes: Array[Byte]): (String, Long, Data) = {
+      val r = BinReader(bytes)
+      (r.string(), r.long(), decodeData(r.bytes()))
+    }
+
+    def encodeCopy(copy: Option[(Long, Data)]): Array[Byte] =
+      BinWriter().option(copy) { case (w, (v, d)) => w.long(v).bytes(encodeData(d)); () }.result()
+
+    def decodeCopy(bytes: Array[Byte]): Option[(Long, Data)] = {
+      val r = BinReader(bytes)
+      r.option(r => (r.long(), decodeData(r.bytes())))
+    }
   }
 
   /** Event-sourced on a [[Journal]]: changes are appended as events and the full state is snapshotted every
@@ -55,6 +147,8 @@ private[sharding] object CoordinatorStore {
               }.ifM(journal.writeSnapshot(shard, encodeData(after)), A.unit)
           }
         }
+
+        def tick(current: Data): F[Unit] = A.unit
       }
     }
 

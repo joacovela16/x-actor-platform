@@ -5,7 +5,8 @@ import cats.effect.{IO, Ref, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
-import xplat.core.cluster.api.{Address, TlsConfig, TransportSecurity}
+import xplat.core.api.net.{TlsConfig, TransportSecurity}
+import xplat.core.cluster.api.Address
 import xplat.core.io.cluster.ClusterTestKit.eventually
 import xplat.core.io.cluster.transport.{TcpConnections, TcpTransport, Transport}
 

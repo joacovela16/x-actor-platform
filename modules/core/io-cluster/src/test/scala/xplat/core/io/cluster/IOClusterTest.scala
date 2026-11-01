@@ -8,6 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import xplat.core.cluster.api.ClusterEvent._
 import xplat.core.cluster.api.SplitBrainStrategy.{KeepMajority, LeaseMajority}
 import xplat.core.cluster.api._
+import xplat.core.api.net.{TlsConfig, TransportSecurity}
 import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.{InMemoryNetwork, TcpTransport}
 import xplat.core.io.coordination.StoreLeaseProvider
@@ -57,6 +58,25 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
         (node(network, 1, List(address(1))), node(network, 2, Nil)).tupled.use { case (seed, other) =>
           seed.cluster.awaitUp >> other.cluster.join(List(address(1))) >> other.cluster.awaitUp >>
             other.cluster.selfMember.map(_.status shouldBe MemberStatus.Up)
+        }
+      }.timeout(Timeout)
+    }
+
+    "the in-memory network keeps out nodes with other security settings" in {
+      def file(name: String) = java.nio.file.Paths.get(getClass.getResource(s"/tls/$name").toURI)
+      def tls(keyStore: String) = Some(TlsConfig(file(keyStore), "changeit", file("trust.p12"), "changeit"))
+      val trusted = TransportSecurity(tls("node.p12"), Some("s3cret"))
+      val outsiders = List(TransportSecurity(tls("node.p12"), Some("other")), TransportSecurity(tls("rogue.p12"), Some("s3cret")), TransportSecurity())
+      InMemoryNetwork[IO].flatMap { network =>
+        val seed = node(network, 1, List(address(1)), fastConfig.copy(security = trusted))
+        val friend = node(network, 2, List(address(1)), fastConfig.copy(security = trusted))
+        val others = outsiders.zipWithIndex.traverse { case (s, i) => node(network, 3 + i, List(address(1)), fastConfig.copy(security = s)) }
+        (seed, friend, others).tupled.use { case (a, b, _) =>
+          for {
+            _       <- allUp(List(a, b))
+            _       <- IO.sleep(1.second)
+            members <- a.cluster.state.map(_.members.map(_.address))
+          } yield members shouldBe Set(address(1), address(2))
         }
       }.timeout(Timeout)
     }

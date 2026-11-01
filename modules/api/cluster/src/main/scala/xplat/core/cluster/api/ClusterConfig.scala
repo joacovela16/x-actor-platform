@@ -1,5 +1,7 @@
 package xplat.core.cluster.api
 
+import xplat.core.api.net.TransportSecurity
+
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** @param host
@@ -24,6 +26,9 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
   * @param pruneTombstonesAfter
   *   how long removed members are remembered, so stale messages cannot bring them back. After that they are forgotten,
   *   which keeps the gossip small in clusters where nodes come and go.
+  * @param security
+  *   TLS and shared secret for the connections between nodes. Only the TCP transport encrypts; the in-memory network
+  *   checks that both sides use the same settings.
   * @param splitBrainResolver
   *   downs members automatically when the cluster splits. `None` leaves downing to the user (see
   *   [[xplat.core.cluster.Cluster.down]]); until then, unreachable members block membership changes.
@@ -74,24 +79,3 @@ final case class FailureDetectorConfig(
   require(maxSampleSize > 0, "maxSampleSize must be positive")
   require(monitoredBy > 0, "monitoredBy must be positive")
 }
-
-/** Protection of the traffic between nodes.
-  *
-  * @param tls
-  *   encrypts the connections and checks the certificate of the other side (mutual TLS). Only used by the TCP transport.
-  * @param sharedSecret
-  *   every connection must prove it knows this secret before any message is accepted. The secret itself never travels:
-  *   nodes answer a random challenge with an HMAC of it. Use it together with TLS, which also hides the messages.
-  */
-final case class TransportSecurity(tls: Option[TlsConfig] = None, sharedSecret: Option[String] = None)
-
-/** Key and trust stores in PKCS12 or JKS format. Every node presents its certificate and only accepts certificates
-  * signed by an authority in the trust store.
-  */
-final case class TlsConfig(
-    keyStore: java.nio.file.Path,
-    keyStorePassword: String,
-    trustStore: java.nio.file.Path,
-    trustStorePassword: String,
-    keyPassword: Option[String] = None
-)

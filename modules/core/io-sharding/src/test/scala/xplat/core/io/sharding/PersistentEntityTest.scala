@@ -1,7 +1,7 @@
 package xplat.core.io.sharding
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Ref => CRef, Resource}
+import cats.effect.{IO, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -12,7 +12,6 @@ import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.InMemoryNetwork
 import xplat.core.io.sharding.IOClusterShardingTest._
 import xplat.core.persistence.Persistence
-import xplat.core.persistence.api.journal.Shard
 import xplat.core.persistence.api.{Effect, Effects, Journal, JournalBuilder}
 import xplat.core.sharding.ClusterSharding
 import xplat.core.sharding.api._
@@ -43,8 +42,7 @@ class PersistentEntityTest extends AsyncFreeSpec with AsyncIOSpec with Matchers 
 
   "a persistent entity keeps its state when its node leaves" in {
     val config = ShardingConfig(passivateIdleAfter = None, rebalanceInterval = 300.millis, retryInterval = 100.millis)
-    (InMemoryNetwork[IO], CRef.of[IO, Map[Shard, Vector[Array[Byte]]]](Map.empty)).tupled.flatMap { case (network, store) =>
-      val journal = new SharedJournal(store)
+    (InMemoryNetwork[IO], SharedJournal()).tupled.flatMap { case (network, journal) =>
       implicit val journals: JournalBuilder[IO] = journal.builder
       def sharded(port: Int): Resource[IO, (Node, ClusterSharding[IO])] =
         for {

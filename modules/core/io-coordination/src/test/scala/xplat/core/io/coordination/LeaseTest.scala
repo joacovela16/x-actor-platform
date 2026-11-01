@@ -6,6 +6,7 @@ import cats.implicits._
 import com.comcast.ip4s._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
+import xplat.core.api.net.{TlsConfig, TransportSecurity}
 import xplat.core.coordination.{Lease, LeaseSettings}
 
 import scala.concurrent.duration._
@@ -194,6 +195,58 @@ class LeaseTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           _    <- IO.sleep(800.millis) // past the time to live: only renewals keep it
           gotB <- b.acquire
         } yield (gotA, gotB) shouldBe (true, false)
+      }
+    }
+
+    "serves clients that know the shared secret" in {
+      val secure = TransportSecurity(sharedSecret = Some("s3cret"))
+      val run = for {
+        store   <- cats.effect.Resource.eval(InMemoryLeaseStore[IO])
+        address <- LeaseServer.bind[IO](host"127.0.0.1", port"0", store, secure)
+        client  <- RemoteLeaseStore[IO](address, secure)
+      } yield client
+      run.use(_.tryAcquire("l", "a", 1.minute)).map(_ shouldBe true)
+    }
+
+    "rejects clients with a wrong secret or none" in {
+      val run = for {
+        store   <- cats.effect.Resource.eval(InMemoryLeaseStore[IO])
+        address <- LeaseServer.bind[IO](host"127.0.0.1", port"0", store, TransportSecurity(sharedSecret = Some("right")))
+        wrong   <- RemoteLeaseStore[IO](address, TransportSecurity(sharedSecret = Some("wrong")))
+        none    <- RemoteLeaseStore[IO](address)
+      } yield (store, wrong, none)
+      run.use { case (store, wrong, none) =>
+        for {
+          a      <- wrong.tryAcquire("l", "a", 1.minute).attempt
+          b      <- none.tryAcquire("l", "b", 1.minute).attempt
+          holder <- store.holder("l")
+        } yield (a.isLeft, b.isLeft, holder) shouldBe (true, true, None)
+      }
+    }
+
+    "a client fails when the server does not know the secret" in {
+      val run = for {
+        store   <- cats.effect.Resource.eval(InMemoryLeaseStore[IO])
+        address <- LeaseServer.bind[IO](host"127.0.0.1", port"0", store)
+        client  <- RemoteLeaseStore[IO](address, TransportSecurity(sharedSecret = Some("s3cret")))
+      } yield client
+      run.use(_.tryAcquire("l", "a", 1.minute).attempt).map(_.isLeft shouldBe true)
+    }
+
+    "talks over mutual TLS and rejects untrusted certificates" in {
+      def file(name: String) = java.nio.file.Paths.get(getClass.getResource(s"/tls/$name").toURI)
+      def tls(keyStore: String) = TransportSecurity(tls = Some(TlsConfig(file(keyStore), "changeit", file("trust.p12"), "changeit")), sharedSecret = Some("s3cret"))
+      val run = for {
+        store   <- cats.effect.Resource.eval(InMemoryLeaseStore[IO])
+        address <- LeaseServer.bind[IO](host"127.0.0.1", port"0", store, tls("node.p12"))
+        trusted <- RemoteLeaseStore[IO](address, tls("node.p12"))
+        rogue   <- RemoteLeaseStore[IO](address, tls("rogue.p12"))
+      } yield (trusted, rogue)
+      run.use { case (trusted, rogue) =>
+        for {
+          ok  <- trusted.tryAcquire("l", "a", 1.minute)
+          bad <- rogue.tryAcquire("l", "b", 1.minute).attempt
+        } yield (ok, bad.isLeft) shouldBe (true, true)
       }
     }
 

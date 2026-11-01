@@ -200,6 +200,26 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
     }.timeout(Timeout)
   }
 
+  "without a journal, a new coordinator takes over the remembered entities of a crashed node" in {
+    val remembering = fastSharding.copy(rememberEntities = true)
+    InMemoryNetwork[IO].flatMap { network =>
+      List(1, 2, 3).traverse(sharded(network, _, remembering)).use { case nodes @ List(a, b, c) =>
+        for {
+          _   <- allUp(nodes.map(_.node))
+          ids  = (1 to 12).map(i => s"c-$i").toList
+          _   <- ids.traverse_(id => get(b.sharding, id))
+          // Node 1 is the oldest, so it runs the coordinator, and hosts some of the entities.
+          onA <- eventually(a.sharding.regionState(Key))(_.entityIds.nonEmpty).map(_.entityIds)
+          _   <- IO.sleep(500.millis) // let the coordinator replicate its state
+          _   <- network.partition(Set(a.node.address), Set(b.node.address, c.node.address))
+          _   <- b.node.cluster.down(a.node.address)
+          // Nobody sends them a message: only the replicated state says they existed.
+          moved <- eventually(hostedIds(List(b, c)))(h => onA.subsetOf(h.values.flatten.toSet))
+        } yield onA.subsetOf(moved.values.flatten.toSet) shouldBe true
+      }
+    }.timeout(Timeout)
+  }
+
   "shards are rebalanced when nodes join" in {
     InMemoryNetwork[IO].flatMap { network =>
       sharded(network, 1).use { a =>

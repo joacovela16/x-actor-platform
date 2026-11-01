@@ -12,8 +12,8 @@ import scala.concurrent.duration.FiniteDuration
 
 /** Decides where the shards of one entity type live. Runs as a cluster singleton.
   *
-  * Its allocations and remembered entities are kept in a [[CoordinatorStore]], so they survive the coordinator moving
-  * or the whole cluster restarting. Regions also report their shards every `retryInterval`, which corrects the stored
+  * Its allocations and remembered entities are kept in a [[CoordinatorStore]]: replicated on the members by default,
+  * so they survive the coordinator moving, or in a journal, so they also survive the whole cluster restarting. Regions also report their shards every `retryInterval`, which corrects the stored
   * view: during the first two intervals after starting it does not allocate new shards, and a stored allocation that its
   * region does not report is treated as lost, so the shard is placed again and its remembered entities restart.
   */
@@ -129,6 +129,7 @@ private[sharding] object Coordinator {
       case Tick =>
         for {
           _   <- ctx.schedule(ctx.pipe(Tick), config.retryInterval)
+          _   <- store.tick(st.data)
           now <- Clock[F].monotonic
           s   <- statuses
           // Shards of regions on nodes that are gone lose their home.
