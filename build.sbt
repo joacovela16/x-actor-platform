@@ -1,9 +1,19 @@
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 ThisBuild / scalaVersion := Dependencies.Versions.scalaVersion
-ThisBuild / version := "0.1.0-SNAPSHOT"
-ThisBuild / organization := "com.example"
+// The version comes from git tags (sbt-ci-release / sbt-dynver): tag v0.1.0 publishes 0.1.0, untagged commits publish
+// snapshots.
+ThisBuild / organization := "io.github.joacovela16"
 ThisBuild / organizationName := "x-actor-platform"
+ThisBuild / homepage := Some(url("https://github.com/joacovela16/x-actor-platform"))
+ThisBuild / licenses := List("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt"))
+ThisBuild / developers := List(
+  Developer("joacovela16", "Joaquín Velázquez Camacho", "joaquinvelazquezcamacho@gmail.com", url("https://github.com/joacovela16"))
+)
+ThisBuild / scmInfo := Some(
+  ScmInfo(url("https://github.com/joacovela16/x-actor-platform"), "scm:git@github.com:joacovela16/x-actor-platform.git")
+)
+ThisBuild / description := "Typed actors for cats-effect: persistence, cluster membership, singletons, sharding and reliable delivery."
 
 val commonsSettings = Seq(
   libraryDependencies ++= Seq(
@@ -25,7 +35,7 @@ val commonsSettings = Seq(
 
 lazy val coreAPI = (project in file("./modules/api/core"))
   .settings(
-    name := "core-api",
+    name := "xplat-core-api",
     commonsSettings
   )
 
@@ -36,7 +46,7 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
   .aggregate(coreAPI)
   .dependsOn(coreAPI)
   .settings(
-    name := "core-persistence",
+    name := "xplat-core-persistence",
     commonsSettings,
     libraryDependencies ++= Seq(
       Dependencies.Compile.catsFS2
@@ -45,7 +55,7 @@ lazy val corePersistence = (project in file("./modules/api/persistence"))
 
 lazy val coreCoordination = (project in file("./modules/api/coordination"))
   .settings(
-    name := "core-coordination",
+    name := "xplat-core-coordination",
     commonsSettings
   )
 
@@ -53,7 +63,7 @@ lazy val coreCluster = (project in file("./modules/api/cluster"))
   .aggregate(coreAPI, coreCoordination)
   .dependsOn(coreAPI, coreCoordination)
   .settings(
-    name := "core-cluster",
+    name := "xplat-core-cluster",
     commonsSettings,
     libraryDependencies ++= Seq(
       Dependencies.Compile.catsFS2
@@ -64,7 +74,7 @@ lazy val coreSharding = (project in file("./modules/api/sharding"))
   .aggregate(coreAPI, coreCluster)
   .dependsOn(coreAPI, coreCluster)
   .settings(
-    name := "core-sharding",
+    name := "xplat-core-sharding",
     commonsSettings
   )
 
@@ -72,7 +82,7 @@ lazy val ioActor = (project in file("./modules/core/io"))
   .aggregate(coreAPI, corePersistence)
   .dependsOn(coreAPI, corePersistence)
   .settings(
-    name := "io-actor",
+    name := "xplat-io-actor",
     commonsSettings,
     libraryDependencies ++= Seq(
       Dependencies.Compile.catsFS2
@@ -80,10 +90,10 @@ lazy val ioActor = (project in file("./modules/core/io"))
   )
 
 lazy val ioCoordination = (project in file("./modules/core/io-coordination"))
-  .aggregate(coreCoordination)
-  .dependsOn(coreCoordination)
+  .aggregate(coreAPI, coreCoordination)
+  .dependsOn(coreAPI, coreCoordination)
   .settings(
-    name := "io-coordination",
+    name := "xplat-io-coordination",
     commonsSettings,
     libraryDependencies ++= Seq(
       Dependencies.Compile.catsEffects,
@@ -95,7 +105,7 @@ lazy val ioCluster = (project in file("./modules/core/io-cluster"))
   .aggregate(ioActor, coreCluster, ioCoordination)
   .dependsOn(ioActor, coreCluster, ioCoordination)
   .settings(
-    name := "io-cluster",
+    name := "xplat-io-cluster",
     commonsSettings,
     libraryDependencies ++= Seq(
       Dependencies.Compile.catsEffects,
@@ -107,7 +117,7 @@ lazy val ioSharding = (project in file("./modules/core/io-sharding"))
   .aggregate(ioCluster, coreSharding)
   .dependsOn(ioCluster % "compile->compile;test->test", coreSharding)
   .settings(
-    name := "io-sharding",
+    name := "xplat-io-sharding",
     commonsSettings
   )
 
@@ -159,12 +169,40 @@ lazy val mongoPersistence = (project in file("./modules/extensions/persistence/m
     Test / parallelExecution := false
   )
 
+/** Runnable examples, the same as in the README. Not published. */
+lazy val examples = (project in file("./modules/examples"))
+  .dependsOn(ioSharding, sqlitePersistence, postgresPersistence)
+  .settings(
+    name := "xplat-examples",
+    commonsSettings,
+    publish / skip := true
+  )
+
+// Every published module is listed, so `publish` and `test` on the root reach all of them.
 lazy val root = (project in file("."))
-  .aggregate(coreSharding, ioSharding, sqlitePersistence, postgresPersistence, mariadbPersistence, mongoPersistence)
+  .aggregate(
+    coreAPI,
+    corePersistence,
+    coreCoordination,
+    coreCluster,
+    coreSharding,
+    ioActor,
+    ioCoordination,
+    ioCluster,
+    ioSharding,
+    persistenceTestkit,
+    jdbcPersistence,
+    sqlitePersistence,
+    postgresPersistence,
+    mariadbPersistence,
+    mongoPersistence,
+    examples
+  )
   .dependsOn(coreSharding, ioSharding, sqlitePersistence, postgresPersistence, mariadbPersistence, mongoPersistence)
   .settings(
     name := "x-actor-platform",
-    commonsSettings
+    commonsSettings,
+    // The root only aggregates the modules; it is not a library.
+    publish / skip := true
   )
 
-// See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html for instructions on how to publish to Sonatype.
