@@ -29,12 +29,24 @@ object Containers {
     out.getOrElse(throw new IllegalStateException(s"${command.mkString(" ")} failed: $err"))
   }
 
-  /** Runs `image` publishing `port` on a random local port, and waits until `ready` succeeds against it. */
-  def container(image: String, port: Int, env: Map[String, String] = Map.empty, args: Seq[String] = Nil)(ready: Container => IO[Unit]): Resource[IO, Container] = {
+  /** A local port that is free now, for services that must know the port they are reached on (e.g. Kafka). */
+  def freePort(): Int = {
+    val socket = new java.net.ServerSocket(0)
+    try socket.getLocalPort
+    finally socket.close()
+  }
+
+  /** Runs `image` publishing `port` on a local port (`hostPort`, or a random one), and waits until `ready` succeeds
+    * against it.
+    */
+  def container(image: String, port: Int, env: Map[String, String] = Map.empty, args: Seq[String] = Nil, hostPort: Option[Int] = None)(
+      ready: Container => IO[Unit]
+  ): Resource[IO, Container] = {
     val cli = runtime.getOrElse(throw new IllegalStateException("neither podman nor docker is available"))
     val start = IO.blocking {
       val envArgs = env.toSeq.flatMap { case (k, v) => Seq("-e", s"$k=$v") }
-      val id = run(Seq(cli, "run", "-d", "--rm", "-p", s"127.0.0.1::$port") ++ envArgs ++ Seq(image) ++ args).linesIterator.toList.last.trim
+      val publish = s"127.0.0.1:${hostPort.fold("")(_.toString)}:$port"
+      val id = run(Seq(cli, "run", "-d", "--rm", "-p", publish) ++ envArgs ++ Seq(image) ++ args).linesIterator.toList.last.trim
       val mapped = run(Seq(cli, "port", id, port.toString)).linesIterator.map(_.trim).find(_.startsWith("127.0.0.1:")).getOrElse(
         throw new IllegalStateException(s"port $port of $image is not published")
       )

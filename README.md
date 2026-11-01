@@ -14,6 +14,9 @@ Typed actors for [cats-effect](https://typelevel.org/cats-effect/), with the bui
 - **Reliable delivery**: messages to sharded entities that survive restarts, delivered at least once and in order.
 - **Coordination**: leases backed by a database or a lease server, to keep singletons and shards from running twice.
 - **Secure transport**: TCP between nodes with mutual TLS and a shared secret.
+- **Messaging connectors**: actors that consume from and publish to Kafka, ActiveMQ (Classic and Artemis) and Redis
+  Streams, acknowledging each message only after the actor processed it.
+- **Dependency injection**: typed keys, services built as `Resource`s, plugin lists that update live, and scopes.
 
 Every feature is split into a small API module (traits and configuration) and an implementation on cats-effect, so your
 code depends on the API and picks the implementation at the edge.
@@ -52,6 +55,13 @@ If you only need local actors, depend on `xplat-io-actor` instead of `xplat-io-s
 | `xplat-io-coordination` | `StoreLeaseProvider`, `InMemoryLeaseStore`, `LeaseServer`, `RemoteLeaseStore` | core-coordination, fs2-io |
 | `xplat-io-cluster` | `IOCluster`, `TcpTransport`, `InMemoryNetwork`, `IOClusterSingleton` | io-actor, io-coordination, core-cluster |
 | `xplat-io-sharding` | `IOClusterSharding`, `IOReliableProducer`, `Deduplicators` | io-cluster, core-sharding |
+| **Messaging** | | |
+| `xplat-core-connectors` | `Sink`, `Publisher`, `RetryPolicy`, `Incoming`, `Outgoing`: what every connector shares | core-api |
+| `xplat-kafka` | `Kafka.consumer`, `Kafka.publisher` (fs2-kafka) | core-connectors |
+| `xplat-activemq` | `ActiveMQ.consumer`, `ActiveMQ.publisher` over Jakarta JMS; add `activemq-client` (Classic) or `artemis-jakarta-client` (Artemis) | core-connectors |
+| `xplat-redis` | `RedisStreams.consumer`, `RedisStreams.publisher` with consumer groups (redis4cats) | core-connectors |
+| **Other** | | |
+| `xplat-di` | `Container`, `Key`, `Services`: dependency injection with `Resource`, multiple keys and scopes | cats-effect |
 | **Storage** | | |
 | `xplat-persistence-jdbc` | `JdbcPersistence`: journal and lease store on any SQL database (doobie + HikariCP) | core-persistence, io-coordination |
 | `xplat-persistence-sqlite` | `SqlitePersistence` | persistence-jdbc |
@@ -195,6 +205,14 @@ implicit val longCodec: Codec[Long, Array[Byte]] = new Codec[Long, Array[Byte]] 
 
 Each backend gives a `journalBuilder` (for persistent actors) and a `leaseStore` (for leases), sharing one connection pool.
 Tables or collections are created on start.
+
+| Database | Artifact | Entry point |
+| --- | --- | --- |
+| SQLite | `xplat-persistence-sqlite` | `SqlitePersistence.resource(path)`: a single process, one writer at a time |
+| PostgreSQL | `xplat-persistence-postgres` | `PostgresPersistence.resource(JdbcConfig(...))` |
+| MariaDB | `xplat-persistence-mariadb` | `MariaDbPersistence.resource(JdbcConfig(...))` |
+| MongoDB | `xplat-persistence-mongodb` | `MongoPersistence.resource(MongoConfig(uri, database))` |
+| Other SQL databases | `xplat-persistence-jdbc` | `JdbcPersistence.resource(JdbcConfig(...), dialect)` with your own `SqlDialect` |
 
 ```scala
 SqlitePersistence.resource[IO](Paths.get("app.db"))
@@ -403,6 +421,94 @@ ClusterConfig(
 )
 ```
 
+### Messaging connectors
+
+Each connector reads a topic, queue or stream and delivers every message to a `Sink`, usually an actor asked through
+`Sink.actor`. The actor replies `Done` when it has processed the message, and only then is it acknowledged: the Kafka
+offset is committed, the JMS message acknowledged or the stream entry `XACK`ed. Delivery is at least once.
+
+```scala
+import xplat.core.connectors._
+import xplat.extensions.connectors.kafka.Kafka
+
+final case class Order(message: Incoming[String], replyTo: Ref[Done])
+
+def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =
+  b.message { case Order(m, replyTo) => process(m.value).map(_ => replyTo ! Done) }
+
+val kafka = Kafka.Config("localhost:9092")
+
+for {
+  handler <- Resource.eval(system.spawn[Order]("orders")(b => orders(b)))
+  // topic "orders" -> actor
+  _ <- Kafka.consumer[IO, String](kafka, Kafka.ConsumerConfig(groupId = "billing", topics = List("orders")))(Sink.actor(handler)(Order(_, _)))
+  // actor -> topic "invoices"
+  invoices  <- Kafka.publisher[IO, String](kafka, "invoices")
+  publisher <- Resource.eval(Publisher.spawn(system, "invoices", invoices))
+  result    <- Resource.eval(publisher.ask[Publisher.Result](Publisher.Publish.confirmed(Outgoing("invoice-1", key = Some("customer-7")))))
+} yield result // Publisher.Result.Published once the broker stored it
+```
+
+The other connectors have the same shape:
+
+```scala
+// ActiveMQ: works with Classic and Artemis through Jakarta JMS
+val factory = ActiveMQ.artemis("tcp://localhost:61616", Some("app"), Some("secret")) // or ActiveMQ.classic(...)
+ActiveMQ.consumer[IO, String](factory, ActiveMQ.Destination.Queue("orders"))(sink)
+ActiveMQ.publisher[IO, String](factory, ActiveMQ.Destination.Topic("invoices"))
+
+// Redis Streams, with a consumer group
+RedisStreams.consumer[IO, String]("redis://localhost", RedisStreams.ConsumerConfig("orders", group = "billing", consumer = "node-1"))(sink)
+RedisStreams.publisher[IO, String]("redis://localhost", "invoices", maxLength = Some(100000))
+```
+
+- **Order.** Messages with the same key arrive in order: the key is the Kafka partition key, the JMS `JMSXGroupID`, or
+  a field of the stream entry. Kafka processes partitions in parallel; ActiveMQ and Redis process one message at a time.
+- **Failures.** A failed delivery is retried with backoff (`RetryPolicy`). When retries run out, `Stop` stops the
+  consumer without acknowledging, so the message comes back later, and `Skip` acknowledges it and moves on.
+  `RunningConsumer.stopped` tells when a consumer stopped on its own.
+- **Sharded entities.** Deliver to an entity with `Sink(m => sharding.entityRefFor(OrderKey, m.key.get).ask[Done](Process(m.value, _)).void)`;
+  `Done` has its codec.
+- **Payloads.** Messages are bytes through a `Codec[T, Array[Byte]]`, like everywhere else in the library;
+  `Codecs.utf8` covers text.
+
+### Dependency injection
+
+`xplat-di` wires services without annotations. A `Key` is both the id and the type of a service; a service declares
+its dependencies and gets them typed. It can be used on its own, without the actor modules.
+
+```scala
+import xplat.di._
+
+val ConfigKey   = Key.single[Config]("config")
+val DatabaseKey = Key.single[Database]("database")
+val Plugins     = Key.multiple[Plugin]("plugins") // any number of services
+val AppKey      = Key.single[App]("app")
+
+val S = Services[IO]
+
+val services = List(
+  S(ConfigKey).pure(Config("jdbc:sqlite:app.db")),
+  S(DatabaseKey).dependsOn(ConfigKey).resource(config => Database.resource(config.dbUrl)),
+  S(Plugins).pure(auditPlugin),
+  S(Plugins).dependsOn(DatabaseKey).pure(db => backupPlugin(db)),
+  S(AppKey).dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins)) // plugins: Many[IO, Plugin]
+)
+
+Container[IO].use { container =>
+  container.provide(services: _*) >> container.get(AppKey).flatMap(_.run)
+} // releases every service, in reverse order
+```
+
+- **Lazy, built once.** Each service is built on first use, after its dependencies, and released when the container
+  is released.
+- **Runtime changes.** `provide` returns a `Registration`; removing it releases the service and what was built with it.
+  A multiple key resolves to a live `Many`, so plugins added or removed later show up without rebuilding anyone.
+- **Scopes.** `container.scope` is a child container for a request or a user: it registers that case's evidence, and
+  the parent's contributions that need it are built only there.
+- **Checks.** `has` and `missing` tell what prevents resolving a key; missing services and cycles fail with a
+  `DependencyError`.
+
 ### Testing
 
 `InMemoryNetwork` runs several nodes in one JVM and can split and heal the network:
@@ -420,7 +526,7 @@ suites the storage backends are tested with.
 ## Building
 
 ```bash
-sbt test            # the database tests start containers with podman or docker, and are skipped without them
+sbt test            # database and broker tests start containers with podman or docker, and are skipped without them
 sbt examples/run    # pick one of the examples
 ```
 

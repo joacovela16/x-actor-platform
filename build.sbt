@@ -170,12 +170,48 @@ lazy val mongoPersistence = (project in file("./modules/extensions/persistence/m
     Test / parallelExecution := false
   )
 
+lazy val coreConnectors = (project in file("./modules/api/connectors"))
+  .dependsOn(coreAPI, ioActor % Test)
+  .settings(
+    name := "xplat-core-connectors",
+    commonsSettings,
+    libraryDependencies += Dependencies.Compile.catsEffects
+  )
+
+/** Settings of a connector module: tests run the shared contract against a broker in a container. */
+def connectorModule(id: String, moduleName: String, deps: Seq[ModuleID]) =
+  Project(id, file(s"./modules/extensions/connectors/$moduleName"))
+    .dependsOn(coreConnectors % "compile->compile;test->test", ioActor % Test, persistenceTestkit % Test)
+    .settings(
+      name := s"xplat-$moduleName",
+      commonsSettings,
+      libraryDependencies ++= deps,
+      Test / fork := true,
+      Test / parallelExecution := false
+    )
+
+lazy val kafkaConnector = connectorModule("kafkaConnector", "kafka", Seq(Dependencies.Compile.fs2Kafka))
+lazy val activemqConnector = connectorModule(
+  "activemqConnector",
+  "activemq",
+  Seq(Dependencies.Compile.jakartaJms, Dependencies.Compile.artemisClient % Optional, Dependencies.Compile.activemqClassicClient % Optional)
+)
+lazy val redisConnector = connectorModule("redisConnector", "redis", Seq(Dependencies.Compile.redis4cats))
+
+lazy val di = (project in file("./modules/core/di"))
+  .settings(
+    name := "xplat-di",
+    commonsSettings,
+    libraryDependencies += Dependencies.Compile.catsEffects
+  )
+
 /** Runnable examples, the same as in the README. Not published. */
 lazy val examples = (project in file("./modules/examples"))
-  .dependsOn(ioSharding, sqlitePersistence, postgresPersistence)
+  .dependsOn(ioSharding, sqlitePersistence, postgresPersistence, di, kafkaConnector, activemqConnector, redisConnector)
   .settings(
     name := "xplat-examples",
     commonsSettings,
+    libraryDependencies += Dependencies.Compile.artemisClient,
     publish / skip := true
   )
 
@@ -197,6 +233,11 @@ lazy val root = (project in file("."))
     postgresPersistence,
     mariadbPersistence,
     mongoPersistence,
+    di,
+    coreConnectors,
+    kafkaConnector,
+    activemqConnector,
+    redisConnector,
     examples
   )
   .dependsOn(coreSharding, ioSharding, sqlitePersistence, postgresPersistence, mariadbPersistence, mongoPersistence)

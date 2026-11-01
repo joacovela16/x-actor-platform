@@ -3,7 +3,7 @@ import sbt.*
 object Dependencies {
 
   object Versions {
-    val scalaVersion: String = "2.13.16"
+    val scalaVersion: String = "2.13.18"
 
     val quicklens: String = "1.9.12"
     val chill: String = "0.10.0"
@@ -38,6 +38,12 @@ object Dependencies {
 
     val doobie: String = "1.0.0-RC9"
 
+    val fs2Kafka: String = "3.9.1"
+    val redis4cats: String = "2.0.6"
+    val jakartaJms: String = "3.1.0"
+    val artemis: String = "2.40.0"
+    val activemqClassic: String = "6.1.6"
+
   }
 
   object Compile {
@@ -64,6 +70,13 @@ object Dependencies {
     val mongoDriver = "org.mongodb" % "mongodb-driver-sync" % Versions.mongoDriver
     val mysqlDriver = "mysql" % "mysql-connector-java" % Versions.mysqlDriver
     val h2Driver = "com.h2database" % "h2" % Versions.h2Driver
+
+    // connectors
+    val fs2Kafka = "com.github.fd4s" %% "fs2-kafka" % Versions.fs2Kafka
+    val redis4cats = "dev.profunktor" %% "redis4cats-effects" % Versions.redis4cats
+    val jakartaJms = "jakarta.jms" % "jakarta.jms-api" % Versions.jakartaJms
+    val artemisClient = "org.apache.activemq" % "artemis-jakarta-client" % Versions.artemis
+    val activemqClassicClient = "org.apache.activemq" % "activemq-client" % Versions.activemqClassic
 
     val chill = "com.twitter" %% "chill" % Versions.chill
 

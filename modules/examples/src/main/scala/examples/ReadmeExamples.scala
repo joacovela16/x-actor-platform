@@ -332,3 +332,75 @@ object LeaseExample {
     splitBrainResolver = Some(SplitBrainResolverConfig(SplitBrainStrategy.LeaseMajority("shop-sbr")))
   )
 }
+
+// ---------------------------------------------------------------- dependency injection
+object DependencyInjectionExample extends cats.effect.IOApp.Simple {
+  import cats.effect.{IO, Resource}
+  import xplat.di._
+
+  final case class Config(dbUrl: String)
+  final class Database(val url: String)
+  trait Plugin { def name: String }
+  final class App(val db: Database, val plugins: Many[IO, Plugin])
+
+  val ConfigKey = Key.single[Config]("config")
+  val DatabaseKey = Key.single[Database]("database")
+  val Plugins = Key.multiple[Plugin]("plugins")
+  val AppKey = Key.single[App]("app")
+
+  val S = Services[IO]
+
+  // Each module exports its services as values; the composition stays in one place.
+  val services = List(
+    S(ConfigKey).pure(Config("jdbc:sqlite:app.db")),
+    S(DatabaseKey).dependsOn(ConfigKey).resource(config => Resource.make(IO(new Database(config.dbUrl)))(_ => IO.println("db closed"))),
+    S(Plugins).pure(new Plugin { val name = "audit" }),
+    S(Plugins).dependsOn(DatabaseKey).pure(db => new Plugin { val name = s"backup of ${db.url}" }),
+    S(AppKey).dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins))
+  )
+
+  def run: IO[Unit] =
+    Container[IO].use { container =>
+      for {
+        _       <- container.provide(services: _*)
+        app     <- container.get(AppKey)
+        plugins <- app.plugins.current // live: plugins registered later show up here
+        _       <- IO.println(plugins.map(_.name).mkString(", "))
+      } yield ()
+    } // releases the services in reverse order: prints "db closed"
+}
+
+// ---------------------------------------------------------------- messaging connectors
+object ConnectorsExample {
+  import cats.effect.{IO, Resource}
+  import xplat.core.api._
+  import xplat.core.connectors._
+  import xplat.core.connectors.Codecs.utf8
+  import xplat.extensions.connectors.activemq.ActiveMQ
+  import xplat.extensions.connectors.kafka.Kafka
+  import xplat.extensions.connectors.redis.RedisStreams
+
+  final case class Order(message: Incoming[String], replyTo: Ref[Done])
+
+  // The actor replies Done once the order is processed; only then is the message acknowledged.
+  def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =
+    b.message { case Order(m, replyTo) => IO.println(s"order ${m.key.getOrElse("-")}: ${m.value}").map(_ => replyTo ! Done) }
+
+  val kafka = Kafka.Config("localhost:9092")
+
+  def run(system: ActorSystem[IO]): Resource[IO, Unit] =
+    for {
+      handler <- Resource.eval(system.spawn[Order]("orders")(b => orders(b)))
+      // Kafka topic "orders" -> actor, committing each offset after the actor replies
+      _ <- Kafka.consumer[IO, String](kafka, Kafka.ConsumerConfig(groupId = "billing", topics = List("orders")))(Sink.actor(handler)(Order(_, _)))
+      // actor -> Kafka topic "invoices"
+      invoices  <- Kafka.publisher[IO, String](kafka, "invoices")
+      publisher <- Resource.eval(Publisher.spawn(system, "invoices", invoices))
+      _         <- Resource.eval(publisher.ask[Publisher.Result](Publisher.Publish.confirmed(Outgoing("invoice-1", key = Some("customer-7")))))
+      // the same with ActiveMQ and Redis Streams
+      factory = ActiveMQ.artemis("tcp://localhost:61616", Some("app"), Some("secret"))
+      _ <- ActiveMQ.consumer[IO, String](factory, ActiveMQ.Destination.Queue("orders"))(Sink.actor(handler)(Order(_, _)))
+      _ <- RedisStreams.consumer[IO, String]("redis://localhost", RedisStreams.ConsumerConfig("orders", "billing", "node-1"))(Sink.actor(handler)(Order(_, _)))
+    } yield ()
+
+}
