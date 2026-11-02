@@ -6,7 +6,7 @@ import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
 import xplat.core.api.error.CodecError
-import xplat.core.api.{ActorSystem, Codec, Ref}
+import xplat.core.api.{ActorSystem, Codec, ReplyTo}
 import xplat.core.io.actor.{IOActorSystem, IOPersistence}
 import xplat.core.persistence.Persistence
 import xplat.core.persistence.api.journal.Shard
@@ -167,7 +167,7 @@ abstract class JournalContract extends AsyncFreeSpec with AsyncIOSpec with Match
 object JournalContract {
   sealed trait Cmd
   final case class Add(n: Int) extends Cmd
-  final case class Get(replyTo: Ref[Int]) extends Cmd
+  final case class Get(replyTo: ReplyTo[Int]) extends Cmd
 
   val handler: (Int, Cmd) => IO[Effects[Int]] = {
     case (_, Add(n))     => IO.pure(Effects(Seq(Effect.Persist(n), Effect.Compress)))

@@ -2,7 +2,7 @@ package xplat.core.connectors
 
 import cats.Functor
 import cats.implicits._
-import xplat.core.api.{ActorRef, Defaults, Ref}
+import xplat.core.api.{ActorRef, Defaults, ReplyTo}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -22,6 +22,6 @@ object Sink {
     * Sink[IO, Order](m => sharding.entityRefFor(OrderKey, m.key.get).ask[Done](Process(m.value, _)).void)
     * }}}
     */
-  def actor[F[_]: Functor, T, M](ref: ActorRef[F, M], timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(wrap: (Incoming[T], Ref[Done]) => M): Sink[F, T] =
+  def actor[F[_]: Functor, T, M](ref: ActorRef[F, M], timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(wrap: (Incoming[T], ReplyTo[Done]) => M): Sink[F, T] =
     (message: Incoming[T]) => ref.ask[Done](replyTo => wrap(message, replyTo), timeout).void
 }

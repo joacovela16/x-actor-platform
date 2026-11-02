@@ -4,12 +4,12 @@ import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
 import xplat.core.api.{ActorRef, ActorSystem, Signal}
 import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
-import xplat.core.api.Ref
+import xplat.core.api.ReplyTo
 
 object Main extends IOApp {
 
   final case class Ping()
-  final case class Pong(respondTo: Ref[String])
+  final case class Pong(respondTo: ReplyTo[String])
 
   def run(args: List[String]): IO[ExitCode] = {
 

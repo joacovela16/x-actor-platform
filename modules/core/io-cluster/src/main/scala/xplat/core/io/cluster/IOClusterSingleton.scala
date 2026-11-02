@@ -7,7 +7,7 @@ import cats.implicits._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api.error.XError
-import xplat.core.api.{ActorRef, Codec, Ref => ReplyTo}
+import xplat.core.api.{ActorRef, Codec, ReplyTo}
 import xplat.core.cluster.api._
 import xplat.core.cluster.{Cluster, ClusterSingleton}
 import xplat.core.coordination.{Lease, LeaseSettings}

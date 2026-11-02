@@ -2,7 +2,7 @@ package xplat.core.connectors
 
 import cats.MonadThrow
 import cats.implicits._
-import xplat.core.api.{ActorRef, ActorSystem, BehaviorBuilder, Ref}
+import xplat.core.api.{ActorRef, ActorSystem, BehaviorBuilder, ReplyTo}
 
 /** Writes messages to one topic, queue or stream. `publish` completes once the broker has stored the message. */
 trait Publisher[F[_], T] {
@@ -14,13 +14,13 @@ trait Publisher[F[_], T] {
 object Publisher {
 
   /** Message of a publisher actor. With `replyTo` the sender learns whether the broker stored it (use `ask`). */
-  final case class Publish[T](message: Outgoing[T], replyTo: Option[Ref[Result]] = None)
+  final case class Publish[T](message: Outgoing[T], replyTo: Option[ReplyTo[Result]] = None)
 
   object Publish {
     def apply[T](value: T): Publish[T] = Publish(Outgoing(value))
 
     /** For `ask`: `ref.ask[Publisher.Result](Publish.confirmed(Outgoing(order)))`. */
-    def confirmed[T](message: Outgoing[T]): Ref[Result] => Publish[T] = replyTo => Publish(message, Some(replyTo))
+    def confirmed[T](message: Outgoing[T]): ReplyTo[Result] => Publish[T] = replyTo => Publish(message, Some(replyTo))
   }
 
   sealed trait Result

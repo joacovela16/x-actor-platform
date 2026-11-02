@@ -1,6 +1,6 @@
 package xplat.core.sharding.delivery
 
-import xplat.core.api.Ref
+import xplat.core.api.ReplyTo
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -12,7 +12,7 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
   * @param seq
   *   position of the message among those of the producer. The messages for one entity arrive in increasing order.
   */
-final case class Delivery[T](producerId: String, seq: Long, message: T, confirmTo: Ref[Long]) {
+final case class Delivery[T](producerId: String, seq: Long, message: T, confirmTo: ReplyTo[Long]) {
   def confirm(): Unit = confirmTo ! seq
 }
 

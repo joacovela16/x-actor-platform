@@ -1,11 +1,10 @@
 package xplat.core.io.actor
 
 import cats.effect.Resource
-import cats.effect.kernel.{Async, Deferred, Ref => CRef}
-import cats.effect.std.{Dispatcher, Queue, Supervisor}
+import cats.effect.kernel.{Async, Deferred, Outcome, Poll, Ref}
+import cats.effect.std.{Queue, Supervisor}
 import cats.implicits._
 import com.softwaremill.quicklens.ModifyPimp
-import fs2.concurrent.Channel
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api._
@@ -18,8 +17,8 @@ final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(i
 
   override def name: String = context.name
 
-  override def spawn[T](name: String)(builder: BehaviorBuilder[F, T]): F[ActorRef[F, T]] = {
-    context.spawn(name)(builder)
+  override def spawn[T](name: String, mailbox: Mailbox)(builder: BehaviorBuilder[F, T]): F[ActorRef[F, T]] = {
+    context.spawn(name, mailbox)(builder)
   }
 
   override def schedule[T](f: => F[T], delay: FiniteDuration): F[Cancelable[F]] = {
@@ -42,14 +41,16 @@ object IOActorSystem {
       timers <- Supervisor[F](await = false)
       as <- Resource.make(
         for {
-          root <- Actor[F, Nothing](
+          root <- A.uncancelable(poll => Actor[F, Nothing](
             name = name,
             behavior = Behaviors[F, Nothing]().same,
             parentPath = Seq("xplat"),
+            mailbox = Mailbox.Unbounded,
             notifyShutdown = (stopped: Deferred[F, Unit]) => stopped.complete(()).void,
             supervisor = supervisor,
-            timers = timers
-          )
+            timers = timers,
+            poll = poll
+          ))
         } yield IOActorSystem(root._2)
       )(r => r.terminate())
     } yield as
@@ -83,7 +84,7 @@ object IOActorSystem {
     def signalHandler: PartialFunction[Signal, Behavior[F, T]]
     def context: Context[F, T]
     def notifyShutdownDone: F[Unit]
-    def children: CRef[F, Children[F]]
+    def children: Ref[F, Children[F]]
     def reduce(command: Command[F, T]): F[State[F, T]]
 
     def withBehavior(behavior: Behavior[F, T]): State[F, T]
@@ -175,7 +176,7 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: CRef[F, Children[F]],
+        children: Ref[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
@@ -196,7 +197,7 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: CRef[F, Children[F]],
+        children: Ref[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
@@ -272,7 +273,7 @@ object IOActorSystem {
         behavior: Behavior[F, T],
         context: Context[F, T],
         notifyShutdownDone: F[Unit],
-        children: CRef[F, Children[F]],
+        children: Ref[F, Children[F]],
         signalHandler: PartialFunction[Signal, Behavior[F, T]]
     )(implicit A: Async[F])
         extends State[F, T] {
@@ -363,8 +364,8 @@ object IOActorSystem {
     override def name: String = actor.name
     override def path: String = actor.path
     override def self: ActorRef[F, T] = actor
-    override def spawn[A](name: String)(b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = actor.spawn[A](name, b)
-    override def pipe(msg: T): F[Unit] = actor.send(msg)
+    override def spawn[A](name: String, mailbox: Mailbox)(b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = actor.spawn[A](name, mailbox, b)
+    override def pipe(msg: T): F[Unit] = actor.pipe(msg)
     override def signal(signal: Signal): F[Unit] = actor.signal(signal)
     override def stopChild(name: String): F[Unit] = actor.stopChild(name)
     override def stop(): F[Unit] = actor.stop()
@@ -378,22 +379,25 @@ object IOActorSystem {
   final case class Actor[F[_], T](
       name: String,
       parentPath: Seq[String],
-      channel: Channel[F, Command[F, T]],
+      mailbox: IOMailbox[F, Command[F, T]],
       supervisor: Supervisor[F],
       timers: Supervisor[F],
-      children: CRef[F, Children[F]],
-      stopped: Deferred[F, Unit]
+      children: Ref[F, Children[F]],
+      stopped: Deferred[F, Unit],
+      log: Logger[F]
   )(implicit A: Async[F])
       extends ActorRef[F, T] {
     self =>
     private lazy val _path = s"${parentPath.mkString("/")}/$name"
 
+    /** Enqueues a command outside the mailbox limit. Used for signals, stops and messages the actor sends to itself. */
     private def push(cmd: Command[F, T]): F[Unit] = {
-      channel.send(cmd).flatMap {
-        case Left(_) => A.raiseError[Unit](new Exception(s"Actor $path already stopped"))
-        case _       => A.unit
+      mailbox.offerSystem(cmd).flatMap { accepted =>
+        if (accepted) A.unit else A.raiseError[Unit](new Exception(s"Actor $path already stopped"))
       }
     }
+
+    def pipe(msg: T): F[Unit] = push(Command.OnMessage(msg))
 
     def stopChild(name: String): F[Unit] = {
       children.get.flatMap(_.links.get(name).traverse_(_.requestShutdown))
@@ -407,8 +411,11 @@ object IOActorSystem {
 
     /** Builds the child on the calling fiber, so it also works from inside this actor's own handlers. The name is
       * reserved first, which rejects duplicates and children of an actor that is shutting down.
+      *
+      * Only the setup of the child's behavior can be cancelled. Whatever ends the build, `built` is completed, because
+      * stopping this actor waits on it to stop the child.
       */
-    def spawn[A](childName: String, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
+    def spawn[A](childName: String, childMailbox: Mailbox, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
       Deferred[F, Option[Actor[F, A]]].flatMap { built =>
         val link = Link[F](childName, built.get.flatMap(_.traverse_(_.stop())))
 
@@ -418,21 +425,26 @@ object IOActorSystem {
           else (c.copy(links = c.links + (childName -> link)), A.unit)
         }.flatten
 
-        val build: F[ActorRef[F, A]] = A
-          .defer(
+        def build(poll: Poll[F]): F[ActorRef[F, A]] = A.guaranteeCase(
+          A.defer(
             Actor[F, A](
               name = childName,
               behavior = b(Behaviors[F, A]()),
               parentPath = parentPath :+ self.name,
+              mailbox = childMailbox,
               notifyShutdown = (released: Deferred[F, Unit]) => push(Command.ChildDown(childName, released)).handleErrorWith(_ => released.complete(()).void),
               supervisor = supervisor,
-              timers = timers
+              timers = timers,
+              poll = poll
             )
           )
-          .flatMap { case (child, _) => built.complete(Some(child)).as(child: ActorRef[F, A]) }
-          .onError { case _ => built.complete(None) >> Deferred[F, Unit].flatMap(released => push(Command.ChildDown(childName, released))).attempt.void }
+            .flatMap { case (child, _) => built.complete(Some(child)).as(child: ActorRef[F, A]) }
+        ) {
+          case Outcome.Succeeded(_) => A.unit
+          case _                    => built.complete(None) >> Deferred[F, Unit].flatMap(released => push(Command.ChildDown(childName, released))).attempt.void
+        }
 
-        reserve >> build
+        A.uncancelable(poll => reserve >> build(poll))
       }
     }
 
@@ -440,32 +452,10 @@ object IOActorSystem {
 
     override def terminated: F[Unit] = stopped.get
 
-    override def ask[A](f: Ref[A] => T, timeout: FiniteDuration): F[A] = {
-      Dispatcher.sequential[F].use { d =>
-        for {
-          onMessage <- Deferred[F, A]
-          ref = new Ref[A] {
-            def send(value: A): Unit = {
-              d.unsafeRunAndForget(
-                onMessage.complete(value)
-              )
-            }
-          }
-          _ <- send(f(ref))
-          result <- A
-            .race(A.sleep(timeout) >> A.pure(new Exception("Ask timeout")), onMessage.get)
-            .flatMap {
-              case Left(value) =>
-                A.raiseError[A](value)
-              case Right(value) =>
-                A.pure(value)
-            }
-        } yield result
-      }
-    }
+    override def ask[A](f: ReplyTo[A] => T, timeout: FiniteDuration): F[A] = IOAsk(send)(f, timeout)
 
     override def send(msg: T): F[Unit] = {
-      push(msg)
+      mailbox.send(Command.OnMessage(msg), path, log)
     }
 
   }
@@ -476,33 +466,35 @@ object IOActorSystem {
         name: String,
         behavior: Behavior[F, T],
         parentPath: Seq[String],
+        mailbox: Mailbox,
         notifyShutdown: Deferred[F, Unit] => F[Unit],
         supervisor: Supervisor[F],
-        timers: Supervisor[F]
+        timers: Supervisor[F],
+        poll: Poll[F]
     )(implicit A: Async[F]): F[(Actor[F, T], Context[F, T])] = {
 
       for {
-        // Unbounded so an actor can send to itself (pipe, unstash, timers) without waiting on its own loop.
-        channel <- Channel.unbounded[F, Command[F, T]]
-        children <- CRef.of[F, Children[F]](Children(Map.empty, closed = false))
+        box <- IOMailbox[F, Command[F, T]](mailbox)
+        children <- Ref.of[F, Children[F]](Children(Map.empty, closed = false))
         stopped <- Deferred[F, Unit]
-        actor = Actor[F, T](name, parentPath, channel, supervisor, timers, children, stopped)
-        logLib <- Slf4jLogger.fromName[F](actor.path)
+        logLib <- Slf4jLogger.fromName[F](s"${parentPath.mkString("/")}/$name")
         log = IOLogger.build(logLib)
+        actor = Actor[F, T](name, parentPath, box, supervisor, timers, children, stopped, log)
         context = IOContext[F, T](actor, log)
         _ <- log.debug(s"Creating actor ${actor.path}")
-        initState <- State
+        // Only the setup runs user code that may take long, so it is the only cancelable step.
+        initState <- poll(State
           .Init[F, T](
             behavior = behavior,
             context = context,
-            notifyShutdownDone = channel.close.void,
+            notifyShutdownDone = box.close,
             children = children,
             signalHandler = PartialFunction.empty
           )
-          .setup()
+          .setup())
 
         _ <- supervisor.supervise(
-          channel.stream
+          box.stream
             .evalScan[F, State[F, T]](initState)(_ reduce _)
             .onFinalize(context.log.debug(s"Actor ${context.path} is down") >> notifyShutdown(stopped))
             .compile
@@ -514,7 +506,7 @@ object IOActorSystem {
 
   }
 
-  private final case class IOLogger[F[_]](private val log: Log4Cats[F]) extends Logger[F] {
+  private[actor] final case class IOLogger[F[_]](private val log: Log4Cats[F]) extends Logger[F] {
     def info(str: String): F[Unit] = log.info(str)
     def info(str: String, throwable: Throwable): F[Unit] = log.info(throwable)(str)
 
@@ -528,7 +520,7 @@ object IOActorSystem {
     def debug(str: String, throwable: Throwable): F[Unit] = log.debug(throwable)(str)
   }
 
-  private object IOLogger {
+  private[actor] object IOLogger {
     def build[F[_]](log: Log4Cats[F]): Logger[F] = IOLogger[F](log)
   }
 

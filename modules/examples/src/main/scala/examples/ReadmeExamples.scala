@@ -11,7 +11,7 @@ object ActorsExample extends cats.effect.IOApp.Simple {
 
   sealed trait Counter
   case object Increment extends Counter
-  final case class Get(replyTo: Ref[Int]) extends Counter
+  final case class Get(replyTo: ReplyTo[Int]) extends Counter
 
   // A behavior is a value: each message returns the behavior for the next one.
   def counter(b: Behaviors[IO, Counter], count: Int): Behavior[IO, Counter] =
@@ -89,7 +89,7 @@ object PersistenceExample extends cats.effect.IOApp.Simple {
 
   sealed trait AccountCmd
   final case class Deposit(amount: Long) extends AccountCmd
-  final case class Balance(replyTo: Ref[Long]) extends AccountCmd
+  final case class Balance(replyTo: ReplyTo[Long]) extends AccountCmd
   case object TakeSnapshot extends AccountCmd
 
   final case class Deposited(amount: Long)
@@ -216,7 +216,7 @@ object ShardingExample {
 
   sealed trait CartCmd
   final case class AddItem(sku: String) extends CartCmd
-  final case class GetItems(replyTo: Ref[String]) extends CartCmd
+  final case class GetItems(replyTo: ReplyTo[String]) extends CartCmd
 
   val CartKey = EntityTypeKey[CartCmd]("cart")
 
@@ -379,7 +379,7 @@ object ConnectorsExample {
   import xplat.extensions.connectors.kafka.Kafka
   import xplat.extensions.connectors.redis.RedisStreams
 
-  final case class Order(message: Incoming[String], replyTo: Ref[Done])
+  final case class Order(message: Incoming[String], replyTo: ReplyTo[Done])
 
   // The actor replies Done once the order is processed; only then is the message acknowledged.
   def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =

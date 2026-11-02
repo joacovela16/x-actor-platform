@@ -1,6 +1,6 @@
 package xplat.core.sharding.api
 
-import xplat.core.api.{Behavior, Behaviors, Codec}
+import xplat.core.api.{Behavior, Behaviors, Codec, Mailbox}
 
 /** Definition of a sharded entity type, given to [[xplat.core.sharding.ClusterSharding.init]].
   *
@@ -15,6 +15,9 @@ import xplat.core.api.{Behavior, Behaviors, Codec}
   *   directly.
   * @param allocationStrategy
   *   where shards are placed. `None` uses the implementation default.
+  * @param mailbox
+  *   mailbox of each entity. With [[xplat.core.api.Mailbox.Overflow.Fail]], a local send to a full entity fails with
+  *   [[xplat.core.api.error.MailboxOverflow]]; a send from another node does not see that error, the message is lost.
   * @param codec
   *   encodes messages sent to entities on other nodes.
   */
@@ -24,12 +27,14 @@ final case class Entity[F[_], T](
     config: ShardingConfig = ShardingConfig(),
     shardIdExtractor: ShardIdExtractor = ShardIdExtractor.hashCode(Entity.DefaultNumberOfShards),
     stopMessage: Option[T] = None,
-    allocationStrategy: Option[ShardAllocationStrategy[F]] = None
+    allocationStrategy: Option[ShardAllocationStrategy[F]] = None,
+    mailbox: Mailbox = Mailbox.Unbounded
 )(implicit val codec: Codec[T, Array[Byte]]) {
   def withConfig(config: ShardingConfig): Entity[F, T] = copy(config = config)
   def withShardIdExtractor(extractor: ShardIdExtractor): Entity[F, T] = copy(shardIdExtractor = extractor)
   def withStopMessage(message: T): Entity[F, T] = copy(stopMessage = Some(message))
   def withAllocationStrategy(strategy: ShardAllocationStrategy[F]): Entity[F, T] = copy(allocationStrategy = Some(strategy))
+  def withMailbox(mailbox: Mailbox): Entity[F, T] = copy(mailbox = mailbox)
 }
 
 object Entity {

@@ -1,7 +1,7 @@
 package xplat.core.io.actor
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Ref => CRef}
+import cats.effect.{IO, Ref}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -106,7 +106,7 @@ class IOPersistenceTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     "commands stashed while locked are replayed after unlock" in withSystem { system =>
       for {
         journal <- InMemoryJournal()
-        locked  <- CRef.of[IO, Boolean](false)
+        locked  <- Ref.of[IO, Boolean](false)
         ref     <- spawnAccumulator(system, journal, handler = lockableHandler(locked))
         _       <- ref ! Lock
         _       <- ref ! Add(2)
@@ -162,7 +162,7 @@ object IOPersistenceTest {
   case object Unlock extends AccCmd
   case object Snapshot extends AccCmd
   case object Shutdown extends AccCmd
-  final case class Current(replyTo: Ref[Int]) extends AccCmd
+  final case class Current(replyTo: ReplyTo[Int]) extends AccCmd
 
   def commandHandler(state: Int, cmd: AccCmd): IO[Effects[Int]] = cmd match {
     case Add(n)        => IO.pure(Effects(Seq(Effect.Persist(n))))
@@ -174,7 +174,7 @@ object IOPersistenceTest {
   }
 
   /** While locked, Add commands are stashed; Unlock replays them. */
-  def lockableHandler(locked: CRef[IO, Boolean])(state: Int, cmd: AccCmd): IO[Effects[Int]] = cmd match {
+  def lockableHandler(locked: Ref[IO, Boolean])(state: Int, cmd: AccCmd): IO[Effects[Int]] = cmd match {
     case Lock   => locked.set(true).as(Effects(Nil))
     case Unlock => locked.set(false).as(Effects(Seq(Effect.Unstash)))
     case Add(n) => locked.get.map(l => if (l) Effects(Seq(Effect.Stash)) else Effects(Seq(Effect.Persist(n))))
@@ -190,7 +190,7 @@ object IOPersistenceTest {
   }
 
   /** Journal kept in memory. A snapshot hides the events written before it, so recovery only replays newer events. */
-  final class InMemoryJournal private (state: CRef[IO, InMemoryJournal.Data], closed: CRef[IO, Boolean]) extends Journal[IO] {
+  final class InMemoryJournal private (state: Ref[IO, InMemoryJournal.Data], closed: Ref[IO, Boolean]) extends Journal[IO] {
     import InMemoryJournal.Data
 
     private def entry(shard: Shard)(d: Data): (Vector[Array[Byte]], Int, Option[Array[Byte]]) =
@@ -242,7 +242,7 @@ object IOPersistenceTest {
         snapshots = snapshot.map(s => shard -> s.getBytes(UTF_8)).toMap,
         snapshotOffset = Map.empty
       )
-      (CRef.of[IO, Data](data), CRef.of[IO, Boolean](false)).mapN(new InMemoryJournal(_, _))
+      (Ref.of[IO, Data](data), Ref.of[IO, Boolean](false)).mapN(new InMemoryJournal(_, _))
     }
   }
 }

@@ -1,6 +1,6 @@
 package xplat.core.cluster.api
 
-import xplat.core.api.{Codec, Defaults, Ref}
+import xplat.core.api.{Codec, Defaults, ReplyTo}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -17,6 +17,6 @@ trait ClusterRef[F[_], T] {
   def send(msg: T): F[Unit]
   def !(msg: T): F[Unit] = send(msg)
 
-  def ask[A](f: Ref[A] => T, timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(implicit codec: Codec[A, Array[Byte]]): F[A]
-  def ?[A](f: Ref[A] => T, timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(implicit codec: Codec[A, Array[Byte]]): F[A] = ask(f, timeout)
+  def ask[A](f: ReplyTo[A] => T, timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(implicit codec: Codec[A, Array[Byte]]): F[A]
+  def ?[A](f: ReplyTo[A] => T, timeout: FiniteDuration = Defaults.ASK_TIMEOUT)(implicit codec: Codec[A, Array[Byte]]): F[A] = ask(f, timeout)
 }

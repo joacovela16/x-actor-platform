@@ -1,7 +1,7 @@
 package xplat.core.io.cluster
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Ref => CRef, Resource}
+import cats.effect.{IO, Ref, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -86,7 +86,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
         node(network, 1, List(address(1))).use { seed =>
           for {
             _    <- seed.cluster.awaitUp
-            seen <- CRef.of[IO, Vector[ClusterEvent]](Vector.empty)
+            seen <- Ref.of[IO, Vector[ClusterEvent]](Vector.empty)
             _    <- seed.cluster.events.evalMap(e => seen.update(_ :+ e)).compile.drain.start
             _    <- eventually(seen.get)(_.exists { case MemberUp(m) => m.address == address(1); case _ => false })
             _    <- node(network, 2, List(address(1))).use(n => n.cluster.awaitUp >> eventually(seen.get)(_.exists { case MemberUp(m) => m.address == address(2); case _ => false }))
@@ -226,7 +226,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           val key = ServiceKey[String]("worker")(stringCodec)
           for {
             _       <- allUp(List(a, b))
-            sizes   <- CRef.of[IO, Vector[Int]](Vector.empty)
+            sizes   <- Ref.of[IO, Vector[Int]](Vector.empty)
             _       <- a.cluster.receptionist.subscribe(key).evalMap(l => sizes.update(_ :+ l.services.size)).compile.drain.start
             worker  <- b.system.spawn[String]("worker")(beh => beh.message(_ => beh.stop))
             _       <- b.cluster.receptionist.register(key, worker)

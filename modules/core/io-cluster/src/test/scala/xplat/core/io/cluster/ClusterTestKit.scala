@@ -3,7 +3,7 @@ package xplat.core.io.cluster
 import cats.effect.{IO, Resource}
 import cats.implicits._
 import xplat.core.api.error.CodecError
-import xplat.core.api.{ActorSystem, Codec, Ref}
+import xplat.core.api.{ActorSystem, Codec, ReplyTo}
 import xplat.core.cluster.Cluster
 import xplat.core.cluster.api._
 import xplat.core.coordination.LeaseProvider
@@ -58,7 +58,7 @@ object ClusterTestKit {
   }
 
   /** Message with a reply ref, as used with `ask`. */
-  final case class Greet(name: String, replyTo: Ref[String])
+  final case class Greet(name: String, replyTo: ReplyTo[String])
 
   /** The ref travels as text, through the resolver of the node that encodes or decodes it. */
   def greetCodec(resolver: RefResolver[IO]): Codec[Greet, Array[Byte]] = new Codec[Greet, Array[Byte]] {

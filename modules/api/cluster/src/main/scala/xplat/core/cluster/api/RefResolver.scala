@@ -1,6 +1,6 @@
 package xplat.core.cluster.api
 
-import xplat.core.api.{Codec, Ref}
+import xplat.core.api.{Codec, ReplyTo}
 
 /** Lets reply refs travel inside messages sent to other nodes.
   *
@@ -14,8 +14,8 @@ import xplat.core.api.{Codec, Ref}
 trait RefResolver[F[_]] {
 
   /** Fails with `IllegalArgumentException` for refs that were not created by a cluster ask or by [[resolve]]. */
-  def serialize[A](ref: Ref[A]): String
+  def serialize[A](ref: ReplyTo[A]): String
 
   /** Fails with `IllegalArgumentException` if `serialized` was not produced by [[serialize]]. */
-  def resolve[A](serialized: String)(implicit codec: Codec[A, Array[Byte]]): Ref[A]
+  def resolve[A](serialized: String)(implicit codec: Codec[A, Array[Byte]]): ReplyTo[A]
 }

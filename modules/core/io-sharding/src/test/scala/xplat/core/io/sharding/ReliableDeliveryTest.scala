@@ -1,12 +1,12 @@
 package xplat.core.io.sharding
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Ref => CRef, Resource}
+import cats.effect.{IO, Ref, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
 import xplat.core.api.error.CodecError
-import xplat.core.api.{Behavior, Behaviors, Codec, Ref}
+import xplat.core.api.{Behavior, Behaviors, Codec, ReplyTo}
 import xplat.core.cluster.api.RefResolver
 import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.InMemoryNetwork
@@ -86,11 +86,11 @@ class ReliableDeliveryTest extends AsyncFreeSpec with AsyncIOSpec with Matchers 
 
     "a journaled one drops what was processed before a restart, and confirms it again" in {
       val confirmed = new java.util.concurrent.ConcurrentLinkedQueue[Long]()
-      def delivery(seq: Long): Delivery[String] = Delivery("p", seq, s"m$seq", new Ref[Long] { def send(msg: Long): Unit = { confirmed.add(msg); () } })
+      def delivery(seq: Long): Delivery[String] = Delivery("p", seq, s"m$seq", new ReplyTo[Long] { def send(msg: Long): Unit = { confirmed.add(msg); () } })
 
       for {
         journal   <- SharedJournal()
-        processed <- CRef.of[IO, List[String]](Nil)
+        processed <- Ref.of[IO, List[String]](Nil)
         process    = (m: String) => processed.update(_ :+ m)
         first     <- Deduplicators.journaled[IO](journal.builder, "inbox", "e", snapshotEvery = 1)
         _         <- List(1L, 2L, 2L).traverse_(seq => first.handle(delivery(seq))(process))
@@ -104,8 +104,8 @@ class ReliableDeliveryTest extends AsyncFreeSpec with AsyncIOSpec with Matchers 
     "a failed process is not confirmed, so the producer sends it again" in {
       for {
         dedup     <- Deduplicators.inMemory[IO]
-        confirmed <- CRef.of[IO, Int](0)
-        d          = Delivery("p", 1L, "m", new Ref[Long] { def send(msg: Long): Unit = () })
+        confirmed <- Ref.of[IO, Int](0)
+        d          = Delivery("p", 1L, "m", new ReplyTo[Long] { def send(msg: Long): Unit = () })
         failed    <- dedup.handle(d)(_ => IO.raiseError(new RuntimeException("boom"))).attempt
         retried   <- dedup.handle(d)(_ => confirmed.update(_ + 1)).attempt
         count     <- confirmed.get
@@ -118,7 +118,7 @@ object ReliableDeliveryTest {
 
   sealed trait InboxMsg
   final case class Deliver(delivery: Delivery[String]) extends InboxMsg
-  final case class Read(replyTo: Ref[String]) extends InboxMsg
+  final case class Read(replyTo: ReplyTo[String]) extends InboxMsg
 
   val Key: EntityTypeKey[InboxMsg] = EntityTypeKey[InboxMsg]("inbox")
 
@@ -146,14 +146,14 @@ object ReliableDeliveryTest {
     * is dropped, so the producer sends it again and the deduplicator has to discard the copy.
     */
   def inbox(resolver: RefResolver[IO], loseFirstConfirmation: Boolean): Entity[IO, InboxMsg] = {
-    val noReply: Ref[Long] = new Ref[Long] { def send(msg: Long): Unit = () }
+    val noReply: ReplyTo[Long] = new ReplyTo[Long] { def send(msg: Long): Unit = () }
 
     def running(b: Behaviors[IO, InboxMsg], dedup: Deduplicator[IO], received: Vector[String], seen: Set[Long]): Behavior[IO, InboxMsg] =
       b.message {
         case Deliver(d) =>
           val firstTime = loseFirstConfirmation && !seen(d.seq)
           val delivery = if (firstTime) d.copy(confirmTo = noReply) else d
-          CRef.of[IO, Vector[String]](received).flatMap { acc =>
+          Ref.of[IO, Vector[String]](received).flatMap { acc =>
             dedup.handle(delivery)(m => acc.update(_ :+ m)) >> acc.get.map(next => running(b, dedup, next, seen + d.seq))
           }
         case Read(replyTo) =>

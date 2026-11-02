@@ -5,6 +5,7 @@ import cats.effect.std.{Semaphore, Supervisor}
 import cats.effect.syntax.all._
 import cats.implicits._
 import org.typelevel.log4cats.{Logger => Log4Cats}
+import xplat.core.api.error.MailboxOverflow
 import xplat.core.api.{ActorRef, Context}
 import xplat.core.sharding.api.{Entity, EntityContext, EntityTypeKey}
 
@@ -38,7 +39,11 @@ private[sharding] final class LocalShard[F[_], T](
         entities.get.map(_.get(entityId)).flatMap {
           case Some(Active(ref, _)) =>
             entities.update(_.updated(entityId, Active(ref, now))) >>
-              ref.send(msg).handleErrorWith(_ => ref.terminated >> spawn(entityId).flatMap(_.send(msg)))
+              ref.send(msg).recoverWith {
+                // A full mailbox means the entity is alive: waiting for it to stop would block the whole shard.
+                case error: MailboxOverflow => A.raiseError(error)
+                case _                      => ref.terminated >> spawn(entityId).flatMap(_.send(msg))
+              }
           case Some(Passivating(ref, buffered)) => entities.update(_.updated(entityId, Passivating(ref, buffered :+ msg)))
           case None                             => spawn(entityId).flatMap(_.send(msg))
         }
@@ -61,7 +66,7 @@ private[sharding] final class LocalShard[F[_], T](
   private def spawn(entityId: String): F[ActorRef[F, T]] =
     for {
       now <- Clock[F].monotonic
-      ref <- holder.spawn[T](entityId)(b => entity.behavior(context(entityId))(b))
+      ref <- holder.spawn[T](entityId, entity.mailbox)(b => entity.behavior(context(entityId))(b))
       _   <- entities.update(_.updated(entityId, Active(ref, now)))
       _   <- supervisor.supervise(ref.terminated >> onTerminated(entityId, ref))
     } yield ref
@@ -74,11 +79,18 @@ private[sharding] final class LocalShard[F[_], T](
           if (buffered.isEmpty) entities.update(_ - entityId)
           else closed.tryGet.flatMap {
             case Some(_) => entities.update(_ - entityId)
-            case None    => spawn(entityId).flatMap(next => buffered.traverse_(next.send))
+            case None    => spawn(entityId).flatMap(next => buffered.traverse_(m => next.send(m).recoverWith(dropOnOverflow(entityId))))
           }
         case _ => A.unit
       }
     }
+
+  /** Messages buffered during passivation have no sender waiting for them, so an overflow drops them instead of
+    * stopping the replay.
+    */
+  private def dropOnOverflow(entityId: String): PartialFunction[Throwable, F[Unit]] = { case error: MailboxOverflow =>
+    log.warn(s"Entity ${typeKey.name}/$entityId: buffered message dropped, ${error.getMessage}")
+  }
 
   private def stop(entityId: String, ref: ActorRef[F, T]): F[Unit] =
     entity.stopMessage.fold(holder.stopChild(entityId))(m => ref.send(m).attempt.void)

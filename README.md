@@ -89,7 +89,7 @@ object ActorsExample extends IOApp.Simple {
 
   sealed trait Counter
   case object Increment extends Counter
-  final case class Get(replyTo: Ref[Int]) extends Counter
+  final case class Get(replyTo: ReplyTo[Int]) extends Counter
 
   def counter(b: Behaviors[IO, Counter], count: Int): Behavior[IO, Counter] =
     b.message {
@@ -160,7 +160,7 @@ import xplat.extensions.persistence.sqlite.SqlitePersistence
 
 sealed trait AccountCmd
 final case class Deposit(amount: Long) extends AccountCmd
-final case class Balance(replyTo: Ref[Long]) extends AccountCmd
+final case class Balance(replyTo: ReplyTo[Long]) extends AccountCmd
 case object TakeSnapshot extends AccountCmd
 
 final case class Deposited(amount: Long)
@@ -304,7 +304,7 @@ import xplat.core.sharding.api._
 
 sealed trait CartCmd
 final case class AddItem(sku: String) extends CartCmd
-final case class GetItems(replyTo: Ref[String]) extends CartCmd
+final case class GetItems(replyTo: ReplyTo[String]) extends CartCmd
 
 val CartKey = EntityTypeKey[CartCmd]("cart")
 
@@ -443,7 +443,7 @@ implicit val order: Codec.Bytes[Order] = Codec.fromJson[Order]
 val cents: Codec.Bytes[BigDecimal] = Codec.long.imap(c => BigDecimal(c) / 100)(d => (d * 100).toLongExact)
 ```
 
-Messages that carry a reply `Ref` need the node's `RefResolver` (see the cart codec in [Sharding](#sharding)).
+Messages that carry a reply `ReplyTo` need the node's `RefResolver` (see the cart codec in [Sharding](#sharding)).
 
 ### Messaging connectors
 
@@ -455,7 +455,7 @@ offset is committed, the JMS message acknowledged or the stream entry `XACK`ed. 
 import xplat.core.connectors._
 import xplat.extensions.connectors.kafka.Kafka
 
-final case class Order(message: Incoming[String], replyTo: Ref[Done])
+final case class Order(message: Incoming[String], replyTo: ReplyTo[Done])
 
 def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =
   b.message { case Order(m, replyTo) => process(m.value).map(_ => replyTo ! Done) }

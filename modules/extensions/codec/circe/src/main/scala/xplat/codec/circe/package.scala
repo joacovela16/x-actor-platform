@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets.UTF_8
   * implicit val order: Codec.Bytes[Order] = Codec.fromJson[Order]
   * }}}
   *
-  * Messages that carry a reply `Ref` need the node's `RefResolver` and cannot be plain JSON values: encode the ref with
+  * Messages that carry a reply `ReplyTo` need the node's `RefResolver` and cannot be plain JSON values: encode the ref with
   * `resolver.serialize` into a string field.
   */
 package object circe {

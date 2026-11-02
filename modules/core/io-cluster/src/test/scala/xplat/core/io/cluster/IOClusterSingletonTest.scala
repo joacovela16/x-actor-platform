@@ -1,7 +1,7 @@
 package xplat.core.io.cluster
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Ref => CRef, Resource}
+import cats.effect.{IO, Ref, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -63,7 +63,7 @@ class IOClusterSingletonTest extends AsyncFreeSpec with AsyncIOSpec with Matcher
 
   "sends the stop message before moving" in {
     InMemoryNetwork[IO].flatMap { network =>
-      CRef.of[IO, Vector[String]](Vector.empty).flatMap { log =>
+      Ref.of[IO, Vector[String]](Vector.empty).flatMap { log =>
         def recording(n: Node): SingletonActor[IO, Greet] =
           SingletonActor[IO, Greet](
             "recording",

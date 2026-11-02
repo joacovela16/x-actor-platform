@@ -1,14 +1,16 @@
 package xplat.core.io.sharding
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Resource}
+import cats.effect.{Deferred, IO, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
-import xplat.core.api.error.CodecError
-import xplat.core.api.{Behavior, Behaviors, Codec, Ref}
+import fs2.Stream
+import xplat.core.api.error.{CodecError, MailboxOverflow}
+import xplat.core.api.{Behavior, Behaviors, Codec, Mailbox, ReplyTo}
 import xplat.core.cluster.api.RefResolver
 import xplat.core.coordination.LeaseUsage
+import xplat.core.io.cluster.ClusterStream
 import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.InMemoryNetwork
 import xplat.core.io.coordination.{InMemoryLeaseStore, StoreLeaseProvider}
@@ -45,6 +47,47 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
 
   private def hostedIds(nodes: Seq[ShardedNode]): IO[Map[Int, Set[String]]] =
     nodes.toList.traverse(n => n.sharding.regionState(Key).map(s => n.node.address.port -> s.entityIds)).map(_.toMap)
+
+  "an entity with a full Fail mailbox rejects the send without blocking its shard" in {
+    InMemoryNetwork[IO].flatMap { network =>
+      node(network, 1, List(address(1)), fastConfig).flatMap(n => ClusterSharding[IO](n.cluster).map(n -> _)).use { case (n, sharding) =>
+        for {
+          _       <- allUp(List(n))
+          started <- Deferred[IO, Unit]
+          gate    <- Deferred[IO, Unit]
+          _       <- sharding.init(gated(started, gate, n.cluster.refResolver))
+          busy     = sharding.entityRefFor(GatedKey, "busy")
+          _       <- busy ! Inc
+          _       <- started.get // "busy" is handling its first message, so its mailbox is empty
+          _       <- busy ! Inc
+          full    <- (busy ! Inc).attempt
+          other   <- sharding.entityRefFor(GatedKey, "other").ask[String](Get(_), 1.second)(stringCodec) // same shard
+          _       <- gate.complete(())
+          count   <- eventually(sharding.entityRefFor(GatedKey, "busy").ask[String](Get(_), 1.second)(stringCodec))(_ == "2")
+        } yield {
+          full shouldBe Left(MailboxOverflow("xplat/sys/cluster-sharding/gated-0/busy", 1))
+          other shouldBe "0"
+          count shouldBe "2"
+        }
+      }
+    }.timeout(Timeout)
+  }
+
+  "ClusterStream sends a stream to an entity on another node" in {
+    InMemoryNetwork[IO].flatMap { network =>
+      List(1, 2).traverse(sharded(network, _)).use { nodes =>
+        val List(a, b) = nodes
+        val ref        = a.sharding.entityRefFor(Key, "streamed")
+        for {
+          _       <- allUp(nodes.map(_.node))
+          _       <- get(b.sharding, "streamed") // wait until the entity is reachable
+          _       <- Stream.emits(List.fill(5)(Inc: Cmd)).covary[IO].through(ClusterStream.sink(ref)).compile.drain
+          _       <- eventually(get(b.sharding, "streamed"))(_.endsWith(":5"))
+          answers <- Stream.range(0, 3).covary[IO].through(ClusterStream.ask(ref, parallelism = 2, 1.second)((_: Int, r: ReplyTo[String]) => Get(r))(implicitly, stringCodec)).compile.toList
+        } yield answers.map(_.split(":").last) shouldBe List("5", "5", "5")
+      }
+    }.timeout(Timeout)
+  }
 
   "delivers messages to an entity from any node and keeps its state" in {
     InMemoryNetwork[IO].flatMap { network =>
@@ -275,7 +318,7 @@ object IOClusterShardingTest {
   sealed trait Cmd
   case object Inc extends Cmd
   case object Passivate extends Cmd
-  final case class Get(replyTo: Ref[String]) extends Cmd
+  final case class Get(replyTo: ReplyTo[String]) extends Cmd
 
   val Key: EntityTypeKey[Cmd] = EntityTypeKey[Cmd]("counter")
 
@@ -305,5 +348,25 @@ object IOClusterShardingTest {
           b.same
       }
     Entity[IO, Cmd](Key)(ctx => b => running(b, ctx, 0))(codec(resolver)).withConfig(config)
+  }
+
+  val GatedKey: EntityTypeKey[Cmd] = EntityTypeKey[Cmd]("gated")
+
+  /** Counter whose mailbox holds one message. Its first `Inc` completes `started` and waits for `gate`. Every entity is
+    * in shard "0", so a blocked shard would also block the other entities.
+    */
+  def gated(started: Deferred[IO, Unit], gate: Deferred[IO, Unit], resolver: RefResolver[IO]): Entity[IO, Cmd] = {
+    def running(b: Behaviors[IO, Cmd], count: Int): Behavior[IO, Cmd] =
+      b.message {
+        case Inc if count == 0 => b.pipe(started.complete(()) >> gate.get.as(running(b, 1)))
+        case Inc               => running(b, count + 1)
+        case Passivate         => b.same
+        case Get(replyTo) =>
+          replyTo ! count.toString
+          b.same
+      }
+    Entity[IO, Cmd](GatedKey)(_ => b => running(b, 0))(codec(resolver))
+      .withShardIdExtractor(_ => "0")
+      .withMailbox(Mailbox.bounded(1, Mailbox.Overflow.Fail))
   }
 }

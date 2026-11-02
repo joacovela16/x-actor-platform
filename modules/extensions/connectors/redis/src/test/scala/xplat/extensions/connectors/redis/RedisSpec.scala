@@ -1,7 +1,7 @@
 package xplat.extensions.connectors.redis
 
 import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource, Ref => CRef}
+import cats.effect.{IO, Resource, Ref}
 import scala.concurrent.duration._
 import xplat.core.connectors._
 import xplat.extensions.persistence.testkit.Containers
@@ -44,7 +44,7 @@ class RedisConnectorSpec extends ConnectorContract {
       val fast = RetryPolicy(maxRetries = 0, initialBackoff = 10.millis)
       def config(name: String, claim: Option[FiniteDuration]) = RedisStreams.ConsumerConfig(stream, "group", name, fast, claimIdleAfter = claim)
       (for {
-        received <- CRef[IO].of(Vector.empty[String])
+        received <- Ref[IO].of(Vector.empty[String])
         _ <- publisher(stream).use(_.publish("orphan"))
         // "crashed" reads it and stops without acknowledging; it never comes back
         _ <- RedisStreams.consumer[IO, String](RedisSpec.uri, config("crashed", None))(Sink[IO, String](_ => IO.raiseError(new RuntimeException("down")))).use(_.stopped.attempt)

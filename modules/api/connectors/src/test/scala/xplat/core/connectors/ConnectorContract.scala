@@ -1,11 +1,11 @@
 package xplat.core.connectors
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Resource, Ref => CRef}
+import cats.effect.{IO, Resource, Ref}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
-import xplat.core.api.{ActorSystem, Ref}
+import xplat.core.api.{ActorSystem, ReplyTo}
 import xplat.core.io.actor.IOActorSystem
 
 import java.util.UUID
@@ -30,10 +30,10 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
   private def eventually[A](io: IO[A])(p: A => Boolean): IO[A] =
     io.flatMap(a => if (p(a)) IO.pure(a) else IO.sleep(100.millis) >> eventually(io)(p))
 
-  private final case class Got(message: Incoming[String], replyTo: Ref[Done])
+  private final case class Got(message: Incoming[String], replyTo: ReplyTo[Done])
 
   /** An actor that keeps the values it receives and confirms them. */
-  private def collector(system: ActorSystem[IO], received: CRef[IO, Vector[Incoming[String]]]) =
+  private def collector(system: ActorSystem[IO], received: Ref[IO, Vector[Incoming[String]]]) =
     system.spawn[Got](fresh("collector"))(b => b.message { case Got(m, replyTo) => received.update(_ :+ m).map(_ => replyTo ! Done) })
 
   private def checked(test: => IO[org.scalatest.Assertion]): IO[org.scalatest.Assertion] =
@@ -45,7 +45,7 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
       val destination = fresh("orders")
       IOActorSystem[IO]("connectors").use { system =>
         for {
-          received <- CRef[IO].of(Vector.empty[Incoming[String]])
+          received <- Ref[IO].of(Vector.empty[Incoming[String]])
           sinkRef  <- collector(system, received)
           values    = (1 to 10).map(i => s"m$i").toList
           results <- (publisher(destination), consumer(destination, fresh("group"), fast)(Sink.actor(sinkRef)(Got(_, _)))).tupled.use { case (pub, _) =>
@@ -68,8 +68,8 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
     "retries a message whose delivery fails, without losing the order" in checked {
       val destination = fresh("retries")
       for {
-        attempts <- CRef[IO].of(0)
-        received <- CRef[IO].of(Vector.empty[String])
+        attempts <- Ref[IO].of(0)
+        received <- Ref[IO].of(Vector.empty[String])
         sink = Sink[IO, String] { m =>
                  if (m.value == "boom") attempts.updateAndGet(_ + 1).flatMap(n => IO.raiseError(new RuntimeException("not yet")).whenA(n < 3)) >> received.update(_ :+ m.value)
                  else received.update(_ :+ m.value)
@@ -86,7 +86,7 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
       val group = fresh("group")
       val failing = Sink[IO, String](_ => IO.raiseError(new RuntimeException("cannot process")))
       for {
-        received <- CRef[IO].of(Vector.empty[String])
+        received <- Ref[IO].of(Vector.empty[String])
         stopped <- publisher(destination).use { pub =>
                      pub.publish("first") >> pub.publish("second") >>
                        consumer(destination, group, fast.copy(maxRetries = 0))(failing).use(_.stopped.attempt)
@@ -103,7 +103,7 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
     "with Skip, a message that cannot be processed is dropped and the next ones go on" in checked {
       val destination = fresh("skips")
       for {
-        received <- CRef[IO].of(Vector.empty[String])
+        received <- Ref[IO].of(Vector.empty[String])
         sink = Sink[IO, String](m => if (m.value == "bad") IO.raiseError(new RuntimeException("bad")) else received.update(_ :+ m.value))
         got <- (publisher(destination), consumer(destination, fresh("group"), fast.copy(whenExhausted = RetryPolicy.Skip))(sink)).tupled.use { case (pub, _) =>
                  List("a", "bad", "b").traverse_(pub.publish(_)) >> eventually(received.get)(_.size >= 2)

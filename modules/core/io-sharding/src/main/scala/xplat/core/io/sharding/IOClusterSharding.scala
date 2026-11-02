@@ -5,7 +5,7 @@ import cats.effect.std.Supervisor
 import cats.implicits._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
-import xplat.core.api.{ActorRef, Codec, Ref => ReplyTo}
+import xplat.core.api.{ActorRef, Codec, ReplyTo}
 import xplat.core.cluster.ClusterSingleton
 import xplat.core.cluster.api.{ClusterRef, SingletonActor, SingletonConfig}
 import xplat.core.persistence.api.JournalBuilder

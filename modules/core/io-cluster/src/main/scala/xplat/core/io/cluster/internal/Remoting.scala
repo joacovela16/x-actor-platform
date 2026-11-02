@@ -6,7 +6,7 @@ import cats.effect.syntax.all._
 import cats.implicits._
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api.error.XError
-import xplat.core.api.{Codec, Ref => ReplyTo}
+import xplat.core.api.{Codec, ReplyTo}
 import xplat.core.cluster.api.{Address, ClusterRef, RefResolver}
 
 import java.util.concurrent.TimeoutException

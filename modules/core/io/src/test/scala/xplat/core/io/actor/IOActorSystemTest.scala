@@ -1,7 +1,7 @@
 package xplat.core.io.actor
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{Deferred, IO, Ref => CRef}
+import cats.effect.{Deferred, IO, Ref}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -41,6 +41,20 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
       } yield result.isLeft shouldBe true
     }
 
+    "a spawn cancelled during the setup frees the name and does not block the shutdown" in withSystem { system =>
+      for {
+        started <- Deferred[IO, Unit]
+        fiber   <- system.spawn[Int]("slow")(b => b.pipe(started.complete(()) >> IO.never)).start
+        _       <- started.get
+        _       <- fiber.cancel
+        outcome <- fiber.join
+        again   <- awaitUntil(system.spawn[Int]("slow")(b => b.same).attempt)(_.isRight)
+      } yield {
+        outcome.isCanceled shouldBe true
+        again.map(_.path) shouldBe Right("xplat/test/slow")
+      }
+    }
+
     "rejects a second actor with the same name" in withSystem { system =>
       for {
         _      <- system.spawn[Int]("dup")(b => b.same)
@@ -58,8 +72,8 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "runs a context setup only once" in withSystem { system =>
       for {
-        setups <- CRef.of[IO, Int](0)
-        seen   <- CRef.of[IO, Vector[Int]](Vector.empty)
+        setups <- Ref.of[IO, Int](0)
+        seen   <- Ref.of[IO, Vector[Int]](Vector.empty)
         ref <- system.spawn[Int]("setup") { b =>
           b.context(_ => setups.update(_ + 1).as(b.message(n => seen.update(_ :+ n))))
         }
@@ -74,7 +88,7 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "are delivered in the order they were sent" in withSystem { system =>
       for {
-        seen <- CRef.of[IO, Vector[Int]](Vector.empty)
+        seen <- Ref.of[IO, Vector[Int]](Vector.empty)
         ref  <- system.spawn[Int]("ordered")(b => b.message(n => seen.update(_ :+ n)))
         _    <- (1 to 20).toList.traverse_(ref ! _)
         xs   <- awaitUntil(seen.get)(_.size == 20)
@@ -83,7 +97,7 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "an actor can send a message to itself from its handler" in withSystem { system =>
       for {
-        seen <- CRef.of[IO, Vector[Int]](Vector.empty)
+        seen <- Ref.of[IO, Vector[Int]](Vector.empty)
         ref <- system.spawn[Int]("self-send") { b =>
           b.context(c => b.message(n => seen.update(_ :+ n) >> (if (n < 3) c.pipe(n + 1) else IO.unit)))
         }
@@ -166,8 +180,8 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "OnError handler receives the exception and the actor keeps working" in withSystem { system =>
       for {
-        errors <- CRef.of[IO, Vector[String]](Vector.empty)
-        seen   <- CRef.of[IO, Vector[Int]](Vector.empty)
+        errors <- Ref.of[IO, Vector[String]](Vector.empty)
+        seen   <- Ref.of[IO, Vector[Int]](Vector.empty)
         ref <- system.spawn[Int]("resilient") { b =>
           b.message(n => if (n == 0) throw Boom else seen.update(_ :+ n))
             .onSignal { case Signal.OnError(e) => errors.update(_ :+ e.getMessage) }
@@ -282,7 +296,7 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "a cancelled schedule never runs" in withSystem { system =>
       for {
-        ran    <- CRef.of[IO, Boolean](false)
+        ran    <- Ref.of[IO, Boolean](false)
         cancel <- system.schedule(ran.set(true), 100.millis)
         _      <- cancel()
         _      <- IO.sleep(300.millis)
@@ -293,7 +307,7 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     "terminating the system cancels pending scheduled tasks" in {
       IOActorSystem[IO]("test").allocated.flatMap { case (system, release) =>
         for {
-          ran   <- CRef.of[IO, Boolean](false)
+          ran   <- Ref.of[IO, Boolean](false)
           _     <- system.schedule(ran.set(true), 200.millis)
           _     <- system.schedule(IO.unit, 1.hour) // must not delay the shutdown
           _     <- release.timeout(Timeout)
@@ -326,7 +340,7 @@ class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "unstashAll replays the stashed messages in order" in withSystem { system =>
       for {
-        seen <- CRef.of[IO, Vector[String]](Vector.empty)
+        seen <- Ref.of[IO, Vector[String]](Vector.empty)
         ref <- system.spawn[String]("stash") { b =>
           b.stash(10) { stash =>
             val open: Behavior[IO, String] = b.message(s => seen.update(_ :+ s))
@@ -349,9 +363,9 @@ object IOActorSystemTest {
 
   sealed trait CounterMsg
   case object Inc extends CounterMsg
-  final case class Get(replyTo: Ref[Int]) extends CounterMsg
+  final case class Get(replyTo: ReplyTo[Int]) extends CounterMsg
 
-  final case class Echo(text: String, replyTo: Ref[String])
+  final case class Echo(text: String, replyTo: ReplyTo[String])
 
   def counter(b: Behaviors[IO, CounterMsg], n: Int): Behavior[IO, CounterMsg] =
     b.message {
