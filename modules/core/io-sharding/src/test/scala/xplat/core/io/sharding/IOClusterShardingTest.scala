@@ -34,12 +34,13 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
       port: Int,
       config: ShardingConfig = fastSharding,
       roles: Set[String] = Set.empty,
-      leases: Option[xplat.core.coordination.LeaseProvider[IO]] = None
+      leases: Option[xplat.core.coordination.LeaseProvider[IO]] = None,
+      onPassivate: IO[Unit] = IO.unit
   ): Resource[IO, ShardedNode] =
     for {
       n <- node(network, port, List(address(1)), fastConfig.copy(roles = roles), leases)
       s <- ClusterSharding[IO](n.cluster)
-      _ <- Resource.eval(s.init(counter(n.address.port, n.cluster.refResolver, config)))
+      _ <- Resource.eval(s.init(counter(n.address.port, n.cluster.refResolver, config, onPassivate)))
     } yield ShardedNode(n, s)
 
   private def get(s: ClusterSharding[IO], id: String): IO[String] =
@@ -192,14 +193,16 @@ class IOClusterShardingTest extends AsyncFreeSpec with AsyncIOSpec with Matchers
   }
 
   "an entity can passivate itself, and messages sent meanwhile are kept" in {
-    InMemoryNetwork[IO].flatMap { network =>
-      sharded(network, 1).use { n =>
+    (InMemoryNetwork[IO], Deferred[IO, Unit]).tupled.flatMap { case (network, passivating) =>
+      sharded(network, 1, onPassivate = passivating.complete(()).void).use { n =>
         val ref = n.sharding.entityRefFor(Key, "self-passivate")
         for {
           _     <- n.node.cluster.awaitUp
           _     <- ref ! Inc
           _     <- eventually(get(n.sharding, "self-passivate"))(_ == "1:1")
           _     <- ref ! Passivate
+          // A message sent before the passivation starts reaches the old entity and is lost with its state, so wait.
+          _     <- passivating.get
           _     <- ref ! Inc
           reply <- eventually(get(n.sharding, "self-passivate"))(_ == "1:1")
         } yield reply shouldBe "1:1"
@@ -337,12 +340,12 @@ object IOClusterShardingTest {
     }
   }
 
-  /** Counter entity that answers `Get` with "<node port>:<count>". */
-  def counter(port: Int, resolver: RefResolver[IO], config: ShardingConfig): Entity[IO, Cmd] = {
+  /** Counter entity that answers `Get` with "<node port>:<count>". `onPassivate` runs once the shard is passivating it. */
+  def counter(port: Int, resolver: RefResolver[IO], config: ShardingConfig, onPassivate: IO[Unit] = IO.unit): Entity[IO, Cmd] = {
     def running(b: Behaviors[IO, Cmd], ctx: EntityContext[IO, Cmd], count: Int): Behavior[IO, Cmd] =
       b.message {
         case Inc       => running(b, ctx, count + 1)
-        case Passivate => ctx.passivate.as(b.same)
+        case Passivate => (ctx.passivate >> onPassivate).as(b.same)
         case Get(replyTo) =>
           replyTo ! s"$port:$count"
           b.same
