@@ -62,7 +62,7 @@ If you only need local actors, depend on `xplat-io-actor` instead of `xplat-io-s
 | `xplat-redis` | `RedisStreams.consumer`, `RedisStreams.publisher` with consumer groups (redis4cats) | core-connectors |
 | **Other** | | |
 | `xplat-circe` | `Codec.fromJson[T]` with circe (`import xplat.codec.circe._`) | core-api, circe |
-| `xplat-di` | `Container`, `Key`, `Services`: dependency injection with `Resource`, multiple keys and scopes | cats-effect |
+| `xplat-di` | `Container`, `Key`: dependency injection with `Resource`, multiple keys and scopes | cats-effect |
 | **Storage** | | |
 | `xplat-persistence-jdbc` | `JdbcPersistence`: journal and lease store on any SQL database (doobie + HikariCP) | core-persistence, io-coordination |
 | `xplat-persistence-sqlite` | `SqlitePersistence` | persistence-jdbc |
@@ -503,20 +503,19 @@ its dependencies and gets them typed. It can be used on its own, without the act
 
 ```scala
 import xplat.di._
+import xplat.di.Key.declare
 
 val ConfigKey   = Key.single[Config]("config")
 val DatabaseKey = Key.single[Database]("database")
 val Plugins     = Key.multiple[Plugin]("plugins") // any number of services
 val AppKey      = Key.single[App]("app")
 
-val S = Services[IO]
-
-val services = List(
-  S(ConfigKey).pure(Config("jdbc:sqlite:app.db")),
-  S(DatabaseKey).dependsOn(ConfigKey).resource(config => Database.resource(config.dbUrl)),
-  S(Plugins).pure(auditPlugin),
-  S(Plugins).dependsOn(DatabaseKey).pure(db => backupPlugin(db)),
-  S(AppKey).dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins)) // plugins: Many[IO, Plugin]
+val services: List[Service[IO]] = List(
+  ConfigKey.pure(Config("jdbc:sqlite:app.db")),
+  DatabaseKey.dependsOn(ConfigKey).resource(config => Database.resource(config.dbUrl)),
+  Plugins.pure(auditPlugin),
+  Plugins.dependsOn(DatabaseKey).pure(db => backupPlugin(db)),
+  AppKey.dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins)) // plugins: Many[IO, Plugin]
 )
 
 Container[IO].use { container =>

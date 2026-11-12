@@ -13,13 +13,12 @@ import scala.collection.mutable
   * val Tools = Key.multiple[Tool]("tools")
   * val Agent = Key.single[Agent]("agent")
   *
-  * val S = Services[IO]
   * Container[IO].use { c =>
   *   c.provide(
-  *     S(Log).pure(consoleLogger()),
-  *     S(Tools).dependsOn(Log).pure(log => readTool(log)),
-  *     S(Tools).dependsOn(Log).pure(log => writeTool(log)),
-  *     S(Agent).dependsOn(Log, Tools).resource((log, tools) => Agent.resource(log, tools))
+  *     Log.pure(consoleLogger()),
+  *     Tools.dependsOn(Log).pure(log => readTool(log)),
+  *     Tools.dependsOn(Log).pure(log => writeTool(log)),
+  *     Agent.dependsOn(Log, Tools).resource((log, tools) => Agent.resource(log, tools))
   *   ) >> c.get(Agent)
   * }
   * }}}
@@ -41,10 +40,10 @@ import scala.collection.mutable
   *
   * {{{
   * val PaysCaja = Key.single[Unit]("pays-caja")
-  * app.provide(S(Rows).dependsOn(PaysCaja).pure(_ => cajaRow))
+  * app.provide(Rows.dependsOn(PaysCaja).pure(_ => cajaRow))
   *
   * app.scope.use { scope =>
-  *   scope.provide(S(PaysCaja).pure(())) >> scope.get(Rows).flatMap(_.current) // List(cajaRow); in `app`, Nil
+  *   scope.provide(PaysCaja.pure(())) >> scope.get(Rows).flatMap(_.current) // List(cajaRow); in `app`, Nil
   * }
   * }}}
   *

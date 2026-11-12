@@ -348,15 +348,15 @@ object DependencyInjectionExample extends cats.effect.IOApp.Simple {
   val Plugins = Key.multiple[Plugin]("plugins")
   val AppKey = Key.single[App]("app")
 
-  val S = Services[IO]
+  import xplat.di.Key.declare
 
   // Each module exports its services as values; the composition stays in one place.
-  val services = List(
-    S(ConfigKey).pure(Config("jdbc:sqlite:app.db")),
-    S(DatabaseKey).dependsOn(ConfigKey).resource(config => Resource.make(IO(new Database(config.dbUrl)))(_ => IO.println("db closed"))),
-    S(Plugins).pure(new Plugin { val name = "audit" }),
-    S(Plugins).dependsOn(DatabaseKey).pure(db => new Plugin { val name = s"backup of ${db.url}" }),
-    S(AppKey).dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins))
+  val services: List[Service[IO]] = List(
+    ConfigKey.pure(Config("jdbc:sqlite:app.db")),
+    DatabaseKey.dependsOn(ConfigKey).resource(config => Resource.make(IO(new Database(config.dbUrl)))(_ => IO.println("db closed"))),
+    Plugins.pure(new Plugin { val name = "audit" }),
+    Plugins.dependsOn(DatabaseKey).pure(db => new Plugin { val name = s"backup of ${db.url}" }),
+    AppKey.dependsOn(DatabaseKey, Plugins).pure((db, plugins) => new App(db, plugins))
   )
 
   def run: IO[Unit] =

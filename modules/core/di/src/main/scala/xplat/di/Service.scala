@@ -2,7 +2,7 @@ package xplat.di
 
 import cats.effect.Resource
 
-/** A service declared as data: which key it provides, what it needs and how it is built. Declare it with [[Services]]
+/** A service declared as data: which key it provides, what it needs and how it is built. Declare it with [[Key]]
   * and register it with [[Container.provide]].
   */
 final class Service[F[_]] private[di] (val key: Key[_], val deps: List[Key[_]], val make: List[Any] => Resource[F, Any]) {
