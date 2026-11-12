@@ -1,6 +1,6 @@
 package xplat.core.persistence.api
 
-import com.softwaremill.quicklens.ModifyPimp
+import com.softwaremill.quicklens._
 
 import scala.language.implicitConversions
 

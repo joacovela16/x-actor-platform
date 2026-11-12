@@ -4,8 +4,7 @@ import cats.effect.Resource
 import cats.effect.kernel.{Async, Deferred, Outcome, Poll, Ref}
 import cats.effect.std.{Queue, Supervisor}
 import cats.implicits._
-import com.softwaremill.quicklens.ModifyPimp
-import org.typelevel.log4cats.slf4j.Slf4jLogger
+import com.softwaremill.quicklens._
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api._
 import xplat.core.io.actor.IOActorSystem.Command.{ChildDown, OnMessage, OnSignal, Stop}
@@ -477,7 +476,7 @@ object IOActorSystem {
         box <- IOMailbox[F, Command[F, T]](mailbox)
         children <- Ref.of[F, Children[F]](Children(Map.empty, closed = false))
         stopped <- Deferred[F, Unit]
-        logLib <- Slf4jLogger.fromName[F](s"${parentPath.mkString("/")}/$name")
+        logLib <- PlatformLogger.fromName[F](s"${parentPath.mkString("/")}/$name")
         log = IOLogger.build(logLib)
         actor = Actor[F, T](name, parentPath, box, supervisor, timers, children, stopped, log)
         context = IOContext[F, T](actor, log)

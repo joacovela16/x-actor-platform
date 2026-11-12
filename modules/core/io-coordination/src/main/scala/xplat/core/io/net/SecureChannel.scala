@@ -72,8 +72,8 @@ final class SecureChannel[F[_]] private (tls: Option[TLSContext[F]], secret: Opt
       mac.doFinal(payload)
     }
 
-  private def verify(role: String, challenge: Array[Byte], payload: Array[Byte], given: Array[Byte]): Boolean =
-    secret.isEmpty || MessageDigest.isEqual(proof(role, challenge, payload), given)
+  private def verify(role: String, challenge: Array[Byte], payload: Array[Byte], provided: Array[Byte]): Boolean =
+    secret.isEmpty || MessageDigest.isEqual(proof(role, challenge, payload), provided)
 }
 
 object SecureChannel {

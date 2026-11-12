@@ -11,7 +11,7 @@ import xplat.core.io.actor.ActorTestKit._
 
 import scala.concurrent.duration._
 
-class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
+class IOActorSystemTest extends AsyncFreeSpec with AsyncIOSpec with PlatformAsyncSpec with Matchers {
   import IOActorSystemTest._
 
   "spawn" - {

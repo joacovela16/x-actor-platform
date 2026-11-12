@@ -23,7 +23,7 @@ code depends on the API and picks the implementation at the edge.
 
 ## Installation
 
-Published for Scala 2.13. Replace `<version>` with the latest release shown in the badge above.
+Published for Scala 2.13 and Scala 3. Replace `<version>` with the latest release shown in the badge above.
 
 ```scala
 val xplatVersion = "<version>"
@@ -39,6 +39,18 @@ libraryDependencies ++= Seq(
 ```
 
 If you only need local actors, depend on `xplat-io-actor` instead of `xplat-io-sharding`.
+
+### Scala.js
+
+Local actors also run in the browser and in Node. `xplat-core-api`, `xplat-core-persistence`, `xplat-io-actor` and
+`xplat-circe` are published for Scala.js too; use `%%%`:
+
+```scala
+libraryDependencies += "io.github.joacovela16" %%% "xplat-io-actor" % xplatVersion
+```
+
+On Scala.js actors log to the console. Cluster, sharding, leases, the storage backends and the connectors need
+sockets or JVM drivers, so they are JVM only.
 
 ## Modules
 
@@ -552,7 +564,7 @@ suites the storage backends are tested with.
 ## Building
 
 ```bash
-sbt test            # database and broker tests start containers with podman or docker, and are skipped without them
+sbt +test           # Scala 2.13 and 3, JVM and Scala.js (needs Node.js); database and broker tests start containers with podman or docker, and are skipped without them
 sbt examples/run    # pick one of the examples
 ```
 

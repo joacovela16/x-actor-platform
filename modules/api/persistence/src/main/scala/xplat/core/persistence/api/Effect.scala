@@ -12,5 +12,5 @@ object Effect {
 
   final case class Persist[Event](value: Event) extends Effect[Event]
 
-  final case object Compress extends Effect[Nothing]
+  case object Compress extends Effect[Nothing]
 }

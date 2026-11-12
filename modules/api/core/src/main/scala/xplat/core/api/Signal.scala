@@ -11,7 +11,7 @@ object Signal {
     override def hashCode(): Int = 2
   }
 
-  final case class StopChild(actorRef: ActorRef[Any, _]) extends Signal {
+  final case class StopChild(actorRef: ActorRef[({ type Any1[A] = Any })#Any1, _]) extends Signal {
     override def hashCode(): Int = 3
   }
 

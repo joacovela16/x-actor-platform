@@ -12,7 +12,7 @@ import xplat.core.io.actor.ActorTestKit._
 
 import scala.concurrent.duration._
 
-class MailboxTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
+class MailboxTest extends AsyncFreeSpec with AsyncIOSpec with PlatformAsyncSpec with Matchers {
   import MailboxTest._
 
   "bounded mailbox" - {

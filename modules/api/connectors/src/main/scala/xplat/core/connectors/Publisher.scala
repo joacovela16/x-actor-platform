@@ -17,7 +17,7 @@ object Publisher {
   final case class Publish[T](message: Outgoing[T], replyTo: Option[ReplyTo[Result]] = None)
 
   object Publish {
-    def apply[T](value: T): Publish[T] = Publish(Outgoing(value))
+    def apply[T](value: T): Publish[T] = new Publish(Outgoing(value))
 
     /** For `ask`: `ref.ask[Publisher.Result](Publish.confirmed(Outgoing(order)))`. */
     def confirmed[T](message: Outgoing[T]): ReplyTo[Result] => Publish[T] = replyTo => Publish(message, Some(replyTo))

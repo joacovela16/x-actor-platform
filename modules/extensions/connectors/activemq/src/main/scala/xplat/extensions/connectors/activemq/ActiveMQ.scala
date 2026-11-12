@@ -98,7 +98,7 @@ object ActiveMQ {
         def process(message: Message): F[Unit] = {
           val position = String.valueOf(message.getJMSMessageID)
           val decoded = A.blocking {
-            val headers = message.getPropertyNames.asScala.collect {
+            val headers: Map[String, String] = message.getPropertyNames.asScala.collect {
               case name: String if !name.startsWith("JMS") => name -> String.valueOf(message.getObjectProperty(name))
             }.toMap
             val key = Option(message.getStringProperty(GroupProperty))

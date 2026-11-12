@@ -44,64 +44,64 @@ object Services {
   final class Declare1[T, D1 <: Key[_]] private[di] (key: Key[T], d1: D1) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: Nil, make)
 
-    def resource[F[_]](make: D1#Value[F] => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]]))
-    def eval[F[_]](make: D1#Value[F] => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]])))
-    def pure[F[_]](make: D1#Value[F] => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]])))
+    def resource[F[_]](make: Dep.Of[D1, F] => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]]))
+    def eval[F[_]](make: Dep.Of[D1, F] => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]])))
+    def pure[F[_]](make: Dep.Of[D1, F] => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]])))
   }
 
   final class Declare2[T, D1 <: Key[_], D2 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]])))
   }
 
   final class Declare3[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]])))
   }
 
   final class Declare4[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_], D4 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3, d4: D4) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: d4 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]])))
   }
 
   final class Declare5[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_], D4 <: Key[_], D5 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3, d4: D4, d5: D5) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: d4 :: d5 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]])))
   }
 
   final class Declare6[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_], D4 <: Key[_], D5 <: Key[_], D6 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3, d4: D4, d5: D5, d6: D6) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: d4 :: d5 :: d6 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]])))
   }
 
   final class Declare7[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_], D4 <: Key[_], D5 <: Key[_], D6 <: Key[_], D7 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3, d4: D4, d5: D5, d6: D6, d7: D7) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: d4 :: d5 :: d6 :: d7 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]])))
   }
 
   final class Declare8[T, D1 <: Key[_], D2 <: Key[_], D3 <: Key[_], D4 <: Key[_], D5 <: Key[_], D6 <: Key[_], D7 <: Key[_], D8 <: Key[_]] private[di] (key: Key[T], d1: D1, d2: D2, d3: D3, d4: D4, d5: D5, d6: D6, d7: D7, d8: D8) {
     private def service[F[_]](make: List[Any] => Resource[F, T]): Service[F] = Service(key, d1 :: d2 :: d3 :: d4 :: d5 :: d6 :: d7 :: d8 :: Nil, make)
 
-    def resource[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F], D8#Value[F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]], v(7).asInstanceOf[D8#Value[F]]))
-    def eval[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F], D8#Value[F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]], v(7).asInstanceOf[D8#Value[F]])))
-    def pure[F[_]](make: (D1#Value[F], D2#Value[F], D3#Value[F], D4#Value[F], D5#Value[F], D6#Value[F], D7#Value[F], D8#Value[F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[D1#Value[F]], v(1).asInstanceOf[D2#Value[F]], v(2).asInstanceOf[D3#Value[F]], v(3).asInstanceOf[D4#Value[F]], v(4).asInstanceOf[D5#Value[F]], v(5).asInstanceOf[D6#Value[F]], v(6).asInstanceOf[D7#Value[F]], v(7).asInstanceOf[D8#Value[F]])))
+    def resource[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F], Dep.Of[D8, F]) => Resource[F, T]): Service[F] = service(v => make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]], v(7).asInstanceOf[Dep.Of[D8, F]]))
+    def eval[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F], Dep.Of[D8, F]) => F[T]): Service[F] = service(v => Resource.eval(make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]], v(7).asInstanceOf[Dep.Of[D8, F]])))
+    def pure[F[_]](make: (Dep.Of[D1, F], Dep.Of[D2, F], Dep.Of[D3, F], Dep.Of[D4, F], Dep.Of[D5, F], Dep.Of[D6, F], Dep.Of[D7, F], Dep.Of[D8, F]) => T): Service[F] = service(v => Resource.pure[F, T](make(v(0).asInstanceOf[Dep.Of[D1, F]], v(1).asInstanceOf[Dep.Of[D2, F]], v(2).asInstanceOf[Dep.Of[D3, F]], v(3).asInstanceOf[Dep.Of[D4, F]], v(4).asInstanceOf[Dep.Of[D5, F]], v(5).asInstanceOf[Dep.Of[D6, F]], v(6).asInstanceOf[Dep.Of[D7, F]], v(7).asInstanceOf[Dep.Of[D8, F]])))
   }
 }

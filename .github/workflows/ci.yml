@@ -19,4 +19,4 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
       # The database modules start PostgreSQL, MariaDB and MongoDB with docker (available on the runner).
-      - run: sbt test
+      - run: sbt +test

@@ -15,7 +15,7 @@ import xplat.core.persistence.api.{Effect, Effects, Journal, JournalBuilder}
 import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.duration._
 
-class IOPersistenceTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
+class IOPersistenceTest extends AsyncFreeSpec with AsyncIOSpec with PlatformAsyncSpec with Matchers {
   import IOPersistenceTest._
 
   private val shard = Shard("acc", "acc")

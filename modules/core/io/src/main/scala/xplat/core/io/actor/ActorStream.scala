@@ -3,7 +3,6 @@ package xplat.core.io.actor
 import cats.effect.kernel.{Async, Deferred}
 import cats.implicits._
 import fs2.{Pipe, Stream}
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 import xplat.core.api.{ActorRef, Defaults, Logger, Mailbox, ReplyTo}
 
 import scala.concurrent.duration.FiniteDuration
@@ -28,7 +27,7 @@ object ActorStream {
       box     <- IOMailbox[F, T](mailbox)
       stopped <- Deferred[F, Unit]
       path = s"xplat/stream/$name"
-      log <- Slf4jLogger.fromName[F](path).map(IOActorSystem.IOLogger.build[F])
+      log <- PlatformLogger.fromName[F](path).map(IOActorSystem.IOLogger.build[F])
       ref = SourceRef[F, T](name, path, box, stopped, log)
     } yield Source(ref, box.stream, box.close >> stopped.complete(()).void)
   }

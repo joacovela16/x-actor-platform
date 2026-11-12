@@ -1,9 +1,11 @@
 import sbt.*
+import org.portablescala.sbtplatformdeps.PlatformDepsPlugin.autoImport.*
 
 object Dependencies {
 
   object Versions {
     val scalaVersion: String = "2.13.18"
+    val scala3Version: String = "3.3.6"
 
     val quicklens: String = "1.9.12"
     val chill: String = "0.10.0"
@@ -48,18 +50,20 @@ object Dependencies {
 
   object Compile {
 
-    val pprint = "com.lihaoyi" %% "pprint" % Versions.pprint
+    val pprint = Def.setting("com.lihaoyi" %%% "pprint" % Versions.pprint)
 
-    val cats = "org.typelevel" %% "cats-core" % Versions.cats
-    val catsEffects = "org.typelevel" %% "cats-effect" % Versions.catsEffects
-    val catsFS2 = "co.fs2" %% "fs2-core" % Versions.catsFS2
+    val cats = Def.setting("org.typelevel" %%% "cats-core" % Versions.cats)
+    val catsEffects = Def.setting("org.typelevel" %%% "cats-effect" % Versions.catsEffects)
+    val catsFS2 = Def.setting("co.fs2" %%% "fs2-core" % Versions.catsFS2)
     val catsFS2IO = "co.fs2" %% "fs2-io" % Versions.catsFS2
-    val catsMtl = "org.typelevel" %% "cats-mtl" % Versions.catsMtl
-    val catsLogger = "org.typelevel" %% "log4cats-core" % Versions.catsLogger
+    val catsMtl = Def.setting("org.typelevel" %%% "cats-mtl" % Versions.catsMtl)
+    val catsLogger = Def.setting("org.typelevel" %%% "log4cats-core" % Versions.catsLogger)
+
+    val catsLoggerConsole = Def.setting("org.typelevel" %%% "log4cats-js-console" % Versions.catsLogger)
 
     val catsSelfLogger = "org.typelevel" %% "log4cats-slf4j" % Versions.catsSelfLogger
 
-    val quicklens = "com.softwaremill.quicklens" %% "quicklens" % Versions.quicklens
+    val quicklens = Def.setting("com.softwaremill.quicklens" %%% "quicklens" % Versions.quicklens)
 
     // database
     val doobieCore = "org.tpolecat" %% "doobie-core" % Versions.doobie
@@ -80,9 +84,9 @@ object Dependencies {
 
     val chill = "com.twitter" %% "chill" % Versions.chill
 
-    val circeCore = "io.circe" %% "circe-core" % Versions.circe
-    val circeParser = "io.circe" %% "circe-parser" % Versions.circe
-    val circeGeneric = "io.circe" %% "circe-generic" % Versions.circe
+    val circeCore = Def.setting("io.circe" %%% "circe-core" % Versions.circe)
+    val circeParser = Def.setting("io.circe" %%% "circe-parser" % Versions.circe)
+    val circeGeneric = Def.setting("io.circe" %%% "circe-generic" % Versions.circe)
 
     val scalaLogging = "com.typesafe.scala-logging" %% "scala-logging" % Versions.scalaLogging
     val logbackClassic = "ch.qos.logback" % "logback-classic" % Versions.logbackClassic
@@ -91,8 +95,8 @@ object Dependencies {
 
   object Test {
 
-    val scalaTest = "org.scalatest" %% "scalatest" % Versions.scalaTest % "test"
-    val catTest = "org.typelevel" %% "cats-effect-testing-scalatest" % Versions.catTest % "test"
+    val scalaTest = Def.setting("org.scalatest" %%% "scalatest" % Versions.scalaTest % "test")
+    val catTest = Def.setting("org.typelevel" %%% "cats-effect-testing-scalatest" % Versions.catTest % "test")
   }
 
 }

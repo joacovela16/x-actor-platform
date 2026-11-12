@@ -61,12 +61,12 @@ object IOClusterSingleton {
         _ <- Resource.onFinalize(singletons.stopAll)
       } yield singletons
 
-  private sealed trait Phase[F[_], T]
-  private final case class Idle[F[_], T]() extends Phase[F, T]
-  private final case class Running[F[_], T](ref: ActorRef[F, T], lease: Option[Lease[F]]) extends Phase[F, T]
+  private[cluster] sealed trait Phase[F[_], T]
+  private[cluster] final case class Idle[F[_], T]() extends Phase[F, T]
+  private[cluster] final case class Running[F[_], T](ref: ActorRef[F, T], lease: Option[Lease[F]]) extends Phase[F, T]
 
   /** The singleton stopped by itself; it is not started again while this node stays the oldest. */
-  private final case class Finished[F[_], T]() extends Phase[F, T]
+  private[cluster] final case class Finished[F[_], T]() extends Phase[F, T]
 
   private[cluster] final class Manager[F[_], T](
       cluster: IOCluster[F],
