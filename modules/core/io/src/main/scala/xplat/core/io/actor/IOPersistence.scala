@@ -21,8 +21,8 @@ object IOPersistence {
         commandHandler: (State, Command) => F[Effects[Event]],
         eventHandler: (State, Event) => State,
         config: Persistence.Config
-    )(implicit stateCodec: Mapper[State], eventCodec: Mapper[Event]): Behaviors[F, Command] => Behavior[F, Command] = { b =>
-      b.context { ctx =>
+    )(implicit stateCodec: Mapper[State], eventCodec: Mapper[Event]): Behavior[F, Command] = {
+      Behaviors.setup[F, Command] { ctx =>
         val shard: Shard = Shard(name, ctx.name)
 
         def parsingResult[T](result: Either[CodecError, T]): F[T] = {
@@ -62,7 +62,7 @@ object IOPersistence {
         }
 
         def startAliveDaemon(state: State, stash: Stash[F, Command], journalQuery: Journal[F]): Behavior[F, Command] = {
-          b.message { cmd =>
+          Behaviors.message { cmd =>
             for {
               effects <- commandHandler(state, cmd)
               next <- foldEffects(state, cmd, stash, effects.entries, journalQuery)
@@ -71,7 +71,7 @@ object IOPersistence {
         }
 
         def startLazyDaemon(state: State, stash: Stash[F, Command], journalQuery: Journal[F], timeout: FiniteDuration): Behavior[F, Command] = {
-          b.context { ctx =>
+          Behaviors.setup { ctx =>
             for {
               cancellable <- ctx.schedule(
                 ctx.signal(Signal.Kill) >> ctx.log.debug(
@@ -81,13 +81,14 @@ object IOPersistence {
                 timeout
               )
             } yield {
-              b.message { cmd =>
+              val active: Behavior[F, Command] = Behaviors.message { cmd =>
                 for {
                   effects <- commandHandler(state, cmd)
                   _ <- cancellable()
                   next <- foldEffects(state, cmd, stash, effects.entries, journalQuery)
                 } yield startLazyDaemon(next, stash, journalQuery, timeout)
               }
+              active
             }
           }
         }
@@ -127,11 +128,13 @@ object IOPersistence {
             initialState <- maybeState.getOrElse(M.pure(initialState))
             currentState <- foldStream(entries, initialState)
           } yield {
-            b
-              .stash(0)(stash => daemon(currentState, stash, journal))
-              .onSignal { case Signal.PostStop =>
-                journal.close() >> ctx.log.debug("2shutting down") >> M.pure(b.same)
+            val recovered: Behavior[F, Command] = Behaviors.onSignal(
+              Behaviors.stash(0)(stash => daemon(currentState, stash, journal)),
+              { case Signal.PostStop =>
+                journal.close() >> ctx.log.debug("2shutting down") // F[Unit]: keeps the same behavior
               }
+            )
+            recovered
           }
         }
 

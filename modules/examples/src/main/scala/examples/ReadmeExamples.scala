@@ -14,18 +14,18 @@ object ActorsExample extends cats.effect.IOApp.Simple {
   final case class Get(replyTo: ReplyTo[Int]) extends Counter
 
   // A behavior is a value: each message returns the behavior for the next one.
-  def counter(b: Behaviors[IO, Counter], count: Int): Behavior[IO, Counter] =
-    b.message {
-      case Increment => counter(b, count + 1)
+  def counter(count: Int): Behavior[IO, Counter] =
+    Behaviors.message {
+      case Increment => counter(count + 1)
       case Get(replyTo) =>
         replyTo ! count
-        b.same
+        Behaviors.same
     }
 
   def run: IO[Unit] =
     ActorSystem[IO].use { system =>
       for {
-        ref   <- system.spawn[Counter]("counter")(b => counter(b, 0))
+        ref   <- system.spawn[Counter]("counter")(counter(0))
         _     <- ref ! Increment
         _     <- ref ! Increment
         count <- ref.ask[Int](Get(_))
@@ -44,30 +44,33 @@ object BehaviorsExample {
   case object Tick extends Job
   final case class Run(task: String) extends Job
 
-  def worker: BehaviorBuilder[IO, Job] = b =>
-    b.context { ctx =>
-      // One-shot timer: sends Tick to this actor after 5 seconds.
-      b.timer(5.seconds, Tick) { _ =>
-        b.message {
-          case Run(task) => ctx.log.info(s"running $task") // an IO[Unit] means "keep the same behavior"
-          case Tick      => ctx.log.info("idle for 5s").as(b.stop)
+  def worker: Behavior[IO, Job] =
+    Behaviors.onSignal(
+      Behaviors.setup { ctx =>
+        // One-shot timer: sends Tick to this actor after 5 seconds.
+        Behaviors.timer(5.seconds, Tick) { _ =>
+          Behaviors.message {
+            case Run(task) => ctx.log.info(s"running $task") // an IO[Unit] means "keep the same behavior"
+            case Tick      => Behaviors.pipe(ctx.log.info("idle for 5s").as(Behaviors.stop))
+          }
         }
+      },
+      {
+        case Signal.OnError(e) => IO.println(s"failed: ${e.getMessage}") // the actor keeps running
+        case Signal.PostStop   => IO.println("stopped")
       }
-    }.onSignal {
-      case Signal.OnError(e) => IO.println(s"failed: ${e.getMessage}") // the actor keeps running
-      case Signal.PostStop   => IO.println("stopped")
-    }
+    )
 
   // Messages that cannot be handled yet are stashed and replayed later.
-  def gate: BehaviorBuilder[IO, Job] = b =>
-    b.stash(100) { stash =>
-      def closed: Behavior[IO, Job] = b.message {
+  def gate: Behavior[IO, Job] =
+    Behaviors.stash(100) { stash =>
+      def closed: Behavior[IO, Job] = Behaviors.message {
         case Tick         => stash.unstashAll(open)
         case job @ Run(_) => stash.push(job)
       }
-      def open: Behavior[IO, Job] = b.message {
+      def open: Behavior[IO, Job] = Behaviors.message {
         case Run(task) => IO.println(s"run $task")
-        case Tick      => b.same
+        case Tick      => Behaviors.same
       }
       closed
     }
@@ -121,7 +124,7 @@ object PersistenceExample extends cats.effect.IOApp.Simple {
       ActorSystem[IO].use { system =>
         for {
           // Events are stored under Shard("account", "acc-1"): restarting the actor replays them.
-          ref     <- system.spawn[AccountCmd]("acc-1")(b => account(b))
+          ref     <- system.spawn[AccountCmd]("acc-1")(account)
           _       <- ref ! Deposit(100)
           balance <- ref.ask[Long](Balance(_))
           _       <- IO.println(s"balance = $balance") // grows by 100 on every run
@@ -134,7 +137,7 @@ object PersistenceExample extends cats.effect.IOApp.Simple {
 object ClusterExample {
   import cats.effect.{IO, Resource}
   import cats.implicits._
-  import xplat.core.api.Codec
+  import xplat.core.api.{Behaviors, Codec}
   import xplat.core.api.error.CodecError
   import xplat.core.cluster.Cluster
   import xplat.core.cluster.api._
@@ -166,7 +169,7 @@ object ClusterExample {
     node("10.0.0.1").use { cluster =>
       for {
         _      <- cluster.awaitUp
-        logger <- cluster.system.spawn[String]("audit")(b => b.message(line => IO.println(line)))
+        logger <- cluster.system.spawn[String]("audit")(Behaviors.message(line => IO.println(line)))
         _      <- cluster.receptionist.register(LoggerKey, logger)
         // Any node can find the registered actors and send to them.
         found  <- cluster.receptionist.find(LoggerKey)
@@ -182,6 +185,7 @@ object ClusterExample {
 
 object SingletonExample {
   import cats.effect.IO
+  import xplat.core.api.Behaviors
   import xplat.core.cluster.{Cluster, ClusterSingleton}
   import xplat.core.cluster.api._
   import xplat.core.io.cluster.IOClusterSingleton
@@ -193,7 +197,7 @@ object SingletonExample {
     ClusterSingleton(cluster).use { singletons =>
       for {
         // Runs on the oldest node; moves to the next one when it leaves.
-        ref <- singletons.init(SingletonActor[IO, String]("scheduler")(b => b.message(job => IO.println(s"scheduling $job"))))
+        ref <- singletons.init(SingletonActor[IO, String]("scheduler")(Behaviors.message(job => IO.println(s"scheduling $job"))))
         _   <- ref ! "nightly-report"
         _   <- IO.never[Unit]
       } yield ()
@@ -234,19 +238,19 @@ object ShardingExample {
     }
   }
 
-  def cart(b: Behaviors[IO, CartCmd], items: List[String]): Behavior[IO, CartCmd] =
-    b.message {
-      case AddItem(sku) => cart(b, sku :: items)
+  def cart(items: List[String]): Behavior[IO, CartCmd] =
+    Behaviors.message {
+      case AddItem(sku) => cart(sku :: items)
       case GetItems(replyTo) =>
         replyTo ! items.reverse.mkString(",")
-        b.same
+        Behaviors.same
     }
 
   implicit val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]()
 
   def run(cluster: Cluster[IO]): IO[Unit] =
     ClusterSharding(cluster).use { sharding =>
-      val entity = Entity[IO, CartCmd](CartKey)(ctx => b => cart(b, Nil))(cartCodec(cluster.refResolver))
+      val entity = Entity[IO, CartCmd](CartKey)(_ => cart(Nil))(cartCodec(cluster.refResolver))
         .withConfig(ShardingConfig(role = Some("backend")))
       for {
         _     <- sharding.init(entity) // on every node that hosts or sends to carts
@@ -282,10 +286,10 @@ object ReliableDeliveryExample {
 
   // The consumer drops duplicates and confirms each delivery.
   def inbox(resolver: RefResolver[IO]): Entity[IO, Notify] =
-    Entity[IO, Notify](InboxKey)(ctx => b =>
-      b.context(_ =>
-        Deduplicators.inMemory[IO].map { dedup =>
-          b.message { case Notify(d) => dedup.handle(d)(text => IO.println(s"${ctx.entityId}: $text")) }
+    Entity[IO, Notify](InboxKey)(ctx =>
+      Behaviors.setup(_ =>
+        Deduplicators.inMemory[IO].map[Behavior[IO, Notify]] { dedup =>
+          Behaviors.message { case Notify(d) => dedup.handle(d)(text => IO.println(s"${ctx.entityId}: $text")) }
         }
       )
     )(inboxCodec(resolver))
@@ -382,14 +386,14 @@ object ConnectorsExample {
   final case class Order(message: Incoming[String], replyTo: ReplyTo[Done])
 
   // The actor replies Done once the order is processed; only then is the message acknowledged.
-  def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =
-    b.message { case Order(m, replyTo) => IO.println(s"order ${m.key.getOrElse("-")}: ${m.value}").map(_ => replyTo ! Done) }
+  def orders: Behavior[IO, Order] =
+    Behaviors.message { case Order(m, replyTo) => IO.println(s"order ${m.key.getOrElse("-")}: ${m.value}").map(_ => replyTo ! Done) }
 
   val kafka = Kafka.Config("localhost:9092")
 
   def run(system: ActorSystem[IO]): Resource[IO, Unit] =
     for {
-      handler <- Resource.eval(system.spawn[Order]("orders")(b => orders(b)))
+      handler <- Resource.eval(system.spawn[Order]("orders")(orders))
       // Kafka topic "orders" -> actor, committing each offset after the actor replies
       _ <- Kafka.consumer[IO, String](kafka, Kafka.ConsumerConfig(groupId = "billing", topics = List("orders")))(Sink.actor(handler)(Order(_, _)))
       // actor -> Kafka topic "invoices"

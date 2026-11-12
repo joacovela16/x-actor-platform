@@ -41,7 +41,7 @@ private[sharding] object Coordinator {
       regionEndpoint: String,
       remember: Boolean,
       store: CoordinatorStore[F]
-  )(b: Behaviors[F, CoordinatorMsg])(implicit A: Async[F]): Behavior[F, CoordinatorMsg] = {
+  )(implicit A: Async[F]): Behavior[F, CoordinatorMsg] = {
 
     def tell(region: Address, msg: RegionMsg): F[Unit] =
       A.fromEither(regionCodec.encode(msg).leftMap(e => new IllegalStateException(e.message))).flatMap(cluster.remoting.send(region, regionEndpoint, _))
@@ -174,9 +174,9 @@ private[sharding] object Coordinator {
     }
 
     def running(ctx: Context[F, CoordinatorMsg], st: State): Behavior[F, CoordinatorMsg] =
-      b.message(msg => handle(ctx, st, msg).flatTap(next => store.save(st.data, next.data)).map(next => running(ctx, next)))
+      Behaviors.message(msg => handle(ctx, st, msg).flatTap(next => store.save(st.data, next.data)).map(next => running(ctx, next)))
 
-    b.context { ctx =>
+    Behaviors.setup { ctx =>
       for {
         now  <- Clock[F].monotonic
         data <- store.load

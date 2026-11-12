@@ -35,7 +35,7 @@ final case class SingletonConfig(
   */
 final case class SingletonActor[F[_], T](
     name: String,
-    behavior: Behaviors[F, T] => Behavior[F, T],
+    behavior: Behavior[F, T],
     config: SingletonConfig = SingletonConfig(),
     stopMessage: Option[T] = None
 )(implicit val codec: Codec[T, Array[Byte]]) {
@@ -44,6 +44,6 @@ final case class SingletonActor[F[_], T](
 }
 
 object SingletonActor {
-  def apply[F[_], T](name: String)(behavior: Behaviors[F, T] => Behavior[F, T])(implicit codec: Codec[T, Array[Byte]]): SingletonActor[F, T] =
+  def apply[F[_], T](name: String)(behavior: Behavior[F, T])(implicit codec: Codec[T, Array[Byte]]): SingletonActor[F, T] =
     new SingletonActor[F, T](name, behavior)
 }

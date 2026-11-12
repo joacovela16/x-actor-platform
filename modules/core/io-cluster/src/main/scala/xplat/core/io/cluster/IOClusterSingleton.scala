@@ -162,7 +162,7 @@ object IOClusterSingleton {
           case Some(lease) =>
             for {
               guardian <- cluster.guardian("singletons")
-              ref      <- guardian.spawn[T](singleton.name)(b => singleton.behavior(b))
+              ref      <- guardian.spawn[T](singleton.name)(singleton.behavior)
               _        <- phase.set(Running(ref, lease))
               _        <- log.info(s"Singleton ${singleton.name} started on $self")
               _        <- supervisor.supervise(ref.terminated >> phase.update { case Running(r, _) if r == ref => Finished(); case other => other })

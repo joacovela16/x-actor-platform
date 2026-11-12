@@ -2,7 +2,7 @@ package xplat.core.io.actor
 
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits._
-import xplat.core.api.{ActorRef, ActorSystem, Signal}
+import xplat.core.api.{ActorRef, ActorSystem, Behaviors, Signal}
 import xplat.core.io.actor.IOActorSystemBuilder.ioActorSystem
 import xplat.core.api.ReplyTo
 
@@ -15,25 +15,26 @@ object Main extends IOApp {
 
     ActorSystem[IO].use { as =>
       for {
-        ref <- as.spawn[Int]("a1") { b =>
-          b.message { n =>
+        ref <- as.spawn[Int]("a1")(
+          Behaviors.message { n =>
             println(n)
             if (n < 10) {
-              b.same
+              Behaviors.same
             } else
-              b.stop
+              Behaviors.stop
           }
-        }
+        )
 
-        ref1 <- as.spawn[Int]("a2") { b =>
-          b.context { _ =>
-            throw new Exception(">>")
-          }.onSignal { case Signal.OnError(throwable) =>
-            b.context { c =>
-              c.log.error(throwable.getLocalizedMessage, throwable) as b.stop
+        _ <- as.spawn[Int]("a2")(
+          Behaviors.onSignal(
+            Behaviors.setup(_ => throw new Exception(">>")),
+            { case Signal.OnError(throwable) =>
+              Behaviors.setup { c =>
+                Behaviors.pipe(c.log.error(throwable.getLocalizedMessage, throwable).as(Behaviors.stop))
+              }
             }
-          }
-        }
+          )
+        )
         _ <- (1 until 3).toList.map(x => ref ! x).sequence_
       } yield ExitCode.Success
     }

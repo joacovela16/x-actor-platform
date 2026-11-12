@@ -39,7 +39,7 @@ class ShardingApiTest extends AnyFunSuite with Matchers {
 
   test("an entity uses defaults that can be overridden") {
     val key = EntityTypeKey[String]("greeter")
-    val entity = Entity[F, String](key)(_ => (b: Behaviors[F, String]) => b.same)
+    val entity = Entity[F, String](key)(_ => Behaviors.same)
 
     entity.config shouldBe ShardingConfig()
     entity.stopMessage shouldBe None

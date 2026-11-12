@@ -148,20 +148,20 @@ object ReliableDeliveryTest {
   def inbox(resolver: RefResolver[IO], loseFirstConfirmation: Boolean): Entity[IO, InboxMsg] = {
     val noReply: ReplyTo[Long] = new ReplyTo[Long] { def send(msg: Long): Unit = () }
 
-    def running(b: Behaviors[IO, InboxMsg], dedup: Deduplicator[IO], received: Vector[String], seen: Set[Long]): Behavior[IO, InboxMsg] =
-      b.message {
+    def running(dedup: Deduplicator[IO], received: Vector[String], seen: Set[Long]): Behavior[IO, InboxMsg] =
+      Behaviors.message {
         case Deliver(d) =>
           val firstTime = loseFirstConfirmation && !seen(d.seq)
           val delivery = if (firstTime) d.copy(confirmTo = noReply) else d
           Ref.of[IO, Vector[String]](received).flatMap { acc =>
-            dedup.handle(delivery)(m => acc.update(_ :+ m)) >> acc.get.map(next => running(b, dedup, next, seen + d.seq))
+            dedup.handle(delivery)(m => acc.update(_ :+ m)) >> acc.get.map(next => running(dedup, next, seen + d.seq))
           }
         case Read(replyTo) =>
           replyTo ! received.mkString(",")
-          IO.pure(b.same)
+          IO.unit
       }
 
-    Entity[IO, InboxMsg](Key)(_ => b => b.context(_ => Deduplicators.inMemory[IO].map(running(b, _, Vector.empty, Set.empty))))(codec(resolver))
+    Entity[IO, InboxMsg](Key)(_ => Behaviors.setup(_ => Deduplicators.inMemory[IO].map(running(_, Vector.empty, Set.empty))))(codec(resolver))
       .withConfig(ShardingConfig(passivateIdleAfter = None, retryInterval = 100.millis))
   }
 }

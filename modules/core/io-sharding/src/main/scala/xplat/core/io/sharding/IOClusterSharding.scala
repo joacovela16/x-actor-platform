@@ -49,7 +49,7 @@ final class IOClusterSharding[F[_]] private (
     val typeName = entity.typeKey.name
     def coordinator(store: CoordinatorStore[F]) = SingletonActor[F, CoordinatorMsg](
       s"sharding-coordinator-$typeName",
-      b => Coordinator.behavior[F](cluster, config, entity.allocationStrategy.getOrElse(new LeastShardAllocationStrategy[F]()), Region.endpoint(typeName), config.rememberEntities, store)(b),
+      Coordinator.behavior[F](cluster, config, entity.allocationStrategy.getOrElse(new LeastShardAllocationStrategy[F]()), Region.endpoint(typeName), config.rememberEntities, store),
       SingletonConfig(role = config.role, handOverRetryInterval = config.retryInterval)
     )(coordinatorCodec)
     for {

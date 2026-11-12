@@ -5,7 +5,7 @@ import cats.effect.{IO, Resource, Ref}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
-import xplat.core.api.{ActorSystem, ReplyTo}
+import xplat.core.api.{ActorSystem, Behaviors, ReplyTo}
 import xplat.core.io.actor.IOActorSystem
 
 import java.util.UUID
@@ -34,7 +34,7 @@ abstract class ConnectorContract extends AsyncFreeSpec with AsyncIOSpec with Mat
 
   /** An actor that keeps the values it receives and confirms them. */
   private def collector(system: ActorSystem[IO], received: Ref[IO, Vector[Incoming[String]]]) =
-    system.spawn[Got](fresh("collector"))(b => b.message { case Got(m, replyTo) => received.update(_ :+ m).map(_ => replyTo ! Done) })
+    system.spawn[Got](fresh("collector"))(Behaviors.message { case Got(m, replyTo) => received.update(_ :+ m).map(_ => replyTo ! Done) })
 
   private def checked(test: => IO[org.scalatest.Assertion]): IO[org.scalatest.Assertion] =
     IO(assume(available, "the broker is not available")) >> test.timeout(timeout)

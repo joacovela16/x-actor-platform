@@ -152,7 +152,7 @@ abstract class JournalContract extends AsyncFreeSpec with AsyncIOSpec with Match
       journals.use { implicit builder =>
         val id = "acc-" + UUID.randomUUID().toString.take(8)
         def spawn(system: ActorSystem[IO]) =
-          system.spawn[JournalContract.Cmd](id)(b => IOPersistence.mkIOPersistence[IO].build[Int, JournalContract.Cmd, Int]("contract", 0, JournalContract.handler, _ + _, Persistence.Config(None))(JournalContract.intCodec, JournalContract.intCodec)(b))
+          system.spawn[JournalContract.Cmd](id)(IOPersistence.mkIOPersistence[IO].build[Int, JournalContract.Cmd, Int]("contract", 0, JournalContract.handler, _ + _, Persistence.Config(None))(JournalContract.intCodec, JournalContract.intCodec))
         for {
           _ <- IOActorSystem[IO]("contract").use { system =>
             spawn(system).flatMap(ref => List(1, 2, 3).traverse_(n => ref ! JournalContract.Add(n)) >> ref.ask[Int](JournalContract.Get(_)))

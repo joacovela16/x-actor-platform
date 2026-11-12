@@ -78,7 +78,7 @@ compile with the build. Run one with `sbt "examples/runMain examples.ActorsExamp
 
 ### Actors
 
-A behavior describes how an actor handles the next message. Returning a new behavior changes the state; `b.same` keeps it.
+A behavior describes how an actor handles the next message. Returning a new behavior changes the state; `Behaviors.same` keeps it. The effect type is never written: Scala infers it from where the behavior is used (`spawn`, a declared result type).
 
 ```scala
 import cats.effect.{IO, IOApp}
@@ -91,18 +91,18 @@ object ActorsExample extends IOApp.Simple {
   case object Increment extends Counter
   final case class Get(replyTo: ReplyTo[Int]) extends Counter
 
-  def counter(b: Behaviors[IO, Counter], count: Int): Behavior[IO, Counter] =
-    b.message {
-      case Increment => counter(b, count + 1)
+  def counter(count: Int): Behavior[IO, Counter] =
+    Behaviors.message {
+      case Increment => counter(count + 1)
       case Get(replyTo) =>
         replyTo ! count
-        b.same
+        Behaviors.same
     }
 
   def run: IO[Unit] =
     ActorSystem[IO].use { system =>
       for {
-        ref   <- system.spawn[Counter]("counter")(b => counter(b, 0))
+        ref   <- system.spawn[Counter]("counter")(counter(0))
         _     <- ref ! Increment
         _     <- ref ! Increment
         count <- ref.ask[Int](Get(_))
@@ -116,30 +116,33 @@ object ActorsExample extends IOApp.Simple {
 keeps the current behavior, or an `F[Behavior]`.
 
 ```scala
-def worker: BehaviorBuilder[IO, Job] = b =>
-  b.context { ctx =>
-    // One-shot timer: sends Tick to this actor after 5 seconds.
-    b.timer(5.seconds, Tick) { _ =>
-      b.message {
-        case Run(task) => ctx.log.info(s"running $task")
-        case Tick      => ctx.log.info("idle for 5s").as(b.stop)
+def worker: Behavior[IO, Job] =
+  Behaviors.onSignal(
+    Behaviors.setup { ctx =>
+      // One-shot timer: sends Tick to this actor after 5 seconds.
+      Behaviors.timer(5.seconds, Tick) { _ =>
+        Behaviors.message {
+          case Run(task) => ctx.log.info(s"running $task")
+          case Tick      => Behaviors.pipe(ctx.log.info("idle for 5s").as(Behaviors.stop))
+        }
       }
+    },
+    {
+      case Signal.OnError(e) => IO.println(s"failed: ${e.getMessage}") // the actor keeps running
+      case Signal.PostStop   => IO.println("stopped")
     }
-  }.onSignal {
-    case Signal.OnError(e) => IO.println(s"failed: ${e.getMessage}") // the actor keeps running
-    case Signal.PostStop   => IO.println("stopped")
-  }
+  )
 
 // Messages that cannot be handled yet are stashed and replayed later.
-def gate: BehaviorBuilder[IO, Job] = b =>
-  b.stash(100) { stash =>
-    def closed: Behavior[IO, Job] = b.message {
+def gate: Behavior[IO, Job] =
+  Behaviors.stash(100) { stash =>
+    def closed: Behavior[IO, Job] = Behaviors.message {
       case Tick         => stash.unstashAll(open)
       case job @ Run(_) => stash.push(job)
     }
-    def open: Behavior[IO, Job] = b.message {
+    def open: Behavior[IO, Job] = Behaviors.message {
       case Run(task) => IO.println(s"run $task")
-      case Tick      => b.same
+      case Tick      => Behaviors.same
     }
     closed
   }
@@ -182,7 +185,7 @@ SqlitePersistence.resource[IO](Paths.get("accounts.db")).use { db =>
   ActorSystem[IO].use { system =>
     for {
       // Events are stored under Shard("account", "acc-1"): restarting the actor replays them.
-      ref     <- system.spawn[AccountCmd]("acc-1")(b => account(b))
+      ref     <- system.spawn[AccountCmd]("acc-1")(account)
       _       <- ref ! Deposit(100)
       balance <- ref.ask[Long](Balance(_))
     } yield balance
@@ -245,7 +248,7 @@ val LoggerKey = ServiceKey[String]("audit-logger") // needs an implicit Codec[St
 node("10.0.0.1").use { cluster =>
   for {
     _      <- cluster.awaitUp
-    logger <- cluster.system.spawn[String]("audit")(b => b.message(line => IO.println(line)))
+    logger <- cluster.system.spawn[String]("audit")(Behaviors.message(line => IO.println(line)))
     _      <- cluster.receptionist.register(LoggerKey, logger)
     found  <- cluster.receptionist.find(LoggerKey)
     _      <- found.services.toList.traverse_(_ ! "hello")
@@ -285,7 +288,7 @@ implicit val singletonBuilder: ClusterSingletonBuilder[IO] = IOClusterSingleton.
 ClusterSingleton(cluster).use { singletons =>
   for {
     // Runs on the oldest node; moves to the next one when it leaves. Messages sent meanwhile are buffered.
-    ref <- singletons.init(SingletonActor[IO, String]("scheduler")(b => b.message(job => IO.println(s"scheduling $job"))))
+    ref <- singletons.init(SingletonActor[IO, String]("scheduler")(Behaviors.message(job => IO.println(s"scheduling $job"))))
     _   <- ref ! "nightly-report"
   } yield ()
 }
@@ -308,18 +311,18 @@ final case class GetItems(replyTo: ReplyTo[String]) extends CartCmd
 
 val CartKey = EntityTypeKey[CartCmd]("cart")
 
-def cart(b: Behaviors[IO, CartCmd], items: List[String]): Behavior[IO, CartCmd] =
-  b.message {
-    case AddItem(sku) => cart(b, sku :: items)
+def cart(items: List[String]): Behavior[IO, CartCmd] =
+  Behaviors.message {
+    case AddItem(sku) => cart(sku :: items)
     case GetItems(replyTo) =>
       replyTo ! items.reverse.mkString(",")
-      b.same
+      Behaviors.same
   }
 
 implicit val shardingBuilder: ClusterShardingBuilder[IO] = IOClusterSharding.builder[IO]()
 
 ClusterSharding(cluster).use { sharding =>
-  val entity = Entity[IO, CartCmd](CartKey)(ctx => b => cart(b, Nil))(cartCodec(cluster.refResolver))
+  val entity = Entity[IO, CartCmd](CartKey)(_ => cart(Nil))(cartCodec(cluster.refResolver))
     .withConfig(ShardingConfig(role = Some("backend")))
   for {
     _     <- sharding.init(entity) // on every node that hosts or sends to carts
@@ -366,10 +369,10 @@ final case class Notify(delivery: Delivery[String])
 val InboxKey = EntityTypeKey[Notify]("inbox")
 
 def inbox(resolver: RefResolver[IO]): Entity[IO, Notify] =
-  Entity[IO, Notify](InboxKey)(ctx => b =>
-    b.context(_ =>
+  Entity[IO, Notify](InboxKey)(ctx =>
+    Behaviors.setup(_ =>
       Deduplicators.inMemory[IO].map { dedup =>
-        b.message { case Notify(d) => dedup.handle(d)(text => IO.println(s"${ctx.entityId}: $text")) }
+        Behaviors.message { case Notify(d) => dedup.handle(d)(text => IO.println(s"${ctx.entityId}: $text")) }
       }
     )
   )(inboxCodec(resolver)) // built on DeliveryCodec[IO, String](resolver)
@@ -457,13 +460,13 @@ import xplat.extensions.connectors.kafka.Kafka
 
 final case class Order(message: Incoming[String], replyTo: ReplyTo[Done])
 
-def orders(b: Behaviors[IO, Order]): Behavior[IO, Order] =
-  b.message { case Order(m, replyTo) => process(m.value).map(_ => replyTo ! Done) }
+def orders: Behavior[IO, Order] =
+  Behaviors.message { case Order(m, replyTo) => process(m.value).map(_ => replyTo ! Done) }
 
 val kafka = Kafka.Config("localhost:9092")
 
 for {
-  handler <- Resource.eval(system.spawn[Order]("orders")(b => orders(b)))
+  handler <- Resource.eval(system.spawn[Order]("orders")(orders))
   // topic "orders" -> actor
   _ <- Kafka.consumer[IO, String](kafka, Kafka.ConsumerConfig(groupId = "billing", topics = List("orders")))(Sink.actor(handler)(Order(_, _)))
   // actor -> topic "invoices"

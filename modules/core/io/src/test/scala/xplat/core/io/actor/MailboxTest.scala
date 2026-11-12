@@ -73,7 +73,7 @@ class MailboxTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
       for {
         probe <- Probe(system, Mailbox.bounded(1, Mailbox.Overflow.Fail))
         _     <- probe.ref ! 1
-        _     <- system.spawn[Int]("other")(_.same) // the system keeps working
+        _     <- system.spawn[Int]("other")(Behaviors.same) // the system keeps working
         _     <- probe.context.get.flatMap(_.stop())
         _     <- probe.gate.complete(())
         _     <- probe.ref.terminated
@@ -117,7 +117,7 @@ class MailboxTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
 
     "sink sends every element to the actor" in withSystem { system =>
       for {
-        ref   <- system.spawn[Sum]("sum")(b => sum(b, 0))
+        ref   <- system.spawn[Sum]("sum")(sum(0))
         _     <- Stream.range(1, 11).covary[IO].map(n => Add(n): Sum).through(ActorStream.sink(ref)).compile.drain
         total <- ref.ask[Int](Total)
       } yield total shouldBe 55
@@ -126,16 +126,12 @@ class MailboxTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     "ask waits for each answer and keeps the order" in withSystem { system =>
       for {
         inFlight <- Ref.of[IO, (Int, Int)]((0, 0)) // (current, max)
-        ref <- system.spawn[Double]("double")(b =>
-                 b.message { case Double(n, replyTo) =>
-                   b.pipe(
-                     inFlight.update { case (c, m) => (c + 1, m max (c + 1)) } >>
-                       IO.sleep(10.millis) >>
-                       inFlight.update { case (c, m) => (c - 1, m) } >>
-                       IO(replyTo ! n * 2).as(b.same)
-                   )
-                 }
-               )
+        ref <- system.spawn[Double]("double")(Behaviors.message { case Double(n, replyTo) =>
+                   inFlight.update { case (c, m) => (c + 1, m max (c + 1)) } >>
+                     IO.sleep(10.millis) >>
+                     inFlight.update { case (c, m) => (c - 1, m) } >>
+                     IO(replyTo ! n * 2)
+                 })
         out    <- Stream.range(1, 6).covary[IO].through(ActorStream.ask(ref, parallelism = 2)((n: Int, r: ReplyTo[Int]) => Double(n, r))).compile.toList
         maxRun <- inFlight.get.map(_._2)
       } yield {
@@ -162,13 +158,11 @@ object MailboxTest {
         seen    <- Ref.of[IO, List[Int]](Nil)
         gate    <- Deferred[IO, Unit]
         context <- Deferred[IO, Context[IO, Int]]
-        ref <- system.spawn[Int]("probe", mailbox)(b =>
-                 b.context { ctx =>
-                   b.pipe(context.complete(ctx).as(b.message { m =>
-                     b.pipe(seen.update(_ :+ m) >> (if (m == 0) gate.get else IO.unit).as(b.same))
+        ref <- system.spawn[Int]("probe", mailbox)(Behaviors.setup { ctx =>
+                   Behaviors.pipe(context.complete(ctx).as(Behaviors.message { m =>
+                     seen.update(_ :+ m) >> (if (m == 0) gate.get else IO.unit)
                    }))
-                 }
-               )
+                 })
         _ <- ref ! 0
         _ <- awaitUntil(seen.get)(_ == List(0)) // 0 is being handled, so the mailbox is empty
       } yield Probe(ref, seen, gate, context)
@@ -178,12 +172,12 @@ object MailboxTest {
   final case class Add(n: Int) extends Sum
   final case class Total(replyTo: ReplyTo[Int]) extends Sum
 
-  def sum(b: Behaviors[IO, Sum], n: Int): Behavior[IO, Sum] =
-    b.message {
-      case Add(x) => sum(b, n + x)
+  def sum(n: Int): Behavior[IO, Sum] =
+    Behaviors.message {
+      case Add(x) => sum(n + x)
       case Total(replyTo) =>
         replyTo ! n
-        b.same
+        Behaviors.same
     }
 
   final case class Double(n: Int, replyTo: ReplyTo[Int])

@@ -149,7 +149,7 @@ class IOPersistenceTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     val persistence: Persistence[IO] = IOPersistence.mkIOPersistence[IO]
     val behavior = persistence.build[Int, AccCmd, Int]("acc", 0, handler, _ + _, config)
     // The journal shard is Shard(persistence name, actor name), i.e. Shard("acc", "acc").
-    system.spawn[AccCmd]("acc")(b => behavior(b))
+    system.spawn[AccCmd]("acc")(behavior)
   }
 }
 

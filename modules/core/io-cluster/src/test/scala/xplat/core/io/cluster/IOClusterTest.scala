@@ -8,6 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import xplat.core.cluster.api.ClusterEvent._
 import xplat.core.cluster.api.SplitBrainStrategy.{KeepMajority, LeaseMajority}
 import xplat.core.cluster.api._
+import xplat.core.api.Behaviors
 import xplat.core.api.net.{TlsConfig, TransportSecurity}
 import xplat.core.io.cluster.ClusterTestKit._
 import xplat.core.io.cluster.transport.{InMemoryNetwork, TcpTransport}
@@ -211,7 +212,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           val keyOnB = ServiceKey[Greet]("greeter")(greetCodec(b.cluster.refResolver))
           for {
             _       <- allUp(List(a, b))
-            greeter <- b.system.spawn[Greet]("greeter")(beh => beh.message(g => g.replyTo ! s"hello ${g.name}"))
+            greeter <- b.system.spawn[Greet]("greeter")(Behaviors.message(g => g.replyTo ! s"hello ${g.name}"))
             _       <- b.cluster.receptionist.register(keyOnB, greeter)
             listing <- eventually(a.cluster.receptionist.find(keyOnA))(_.services.size == 1)
             reply   <- listing.services.head.ask[String](Greet("ana", _))(stringCodec)
@@ -228,7 +229,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
             _       <- allUp(List(a, b))
             sizes   <- Ref.of[IO, Vector[Int]](Vector.empty)
             _       <- a.cluster.receptionist.subscribe(key).evalMap(l => sizes.update(_ :+ l.services.size)).compile.drain.start
-            worker  <- b.system.spawn[String]("worker")(beh => beh.message(_ => beh.stop))
+            worker  <- b.system.spawn[String]("worker")(Behaviors.message(_ => Behaviors.stop))
             _       <- b.cluster.receptionist.register(key, worker)
             _       <- eventually(sizes.get)(_.lastOption.contains(1))
             _       <- worker ! "stop" // a stopped actor is deregistered
@@ -245,7 +246,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           val keyOnB = ServiceKey[Greet]("silent")(greetCodec(b.cluster.refResolver))
           for {
             _       <- allUp(List(a, b))
-            silent  <- b.system.spawn[Greet]("silent")(beh => beh.message(_ => beh.same))
+            silent  <- b.system.spawn[Greet]("silent")(Behaviors.message(_ => Behaviors.same))
             _       <- b.cluster.receptionist.register(keyOnB, silent)
             listing <- eventually(a.cluster.receptionist.find(keyOnA))(_.services.nonEmpty)
             result  <- listing.services.head.ask[String](Greet("x", _), 200.millis)(stringCodec).attempt
@@ -278,7 +279,7 @@ class IOClusterTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           for {
             _       <- seed.cluster.join(List(seed.address))
             _       <- allUp(List(seed, other))
-            greeter <- other.system.spawn[Greet]("greeter")(beh => beh.message(g => g.replyTo ! s"hi ${g.name}"))
+            greeter <- other.system.spawn[Greet]("greeter")(Behaviors.message(g => g.replyTo ! s"hi ${g.name}"))
             _       <- other.cluster.receptionist.register(keyOnOther, greeter)
             listing <- eventually(seed.cluster.receptionist.find(keyOnSeed))(_.services.size == 1)
             reply   <- listing.services.head.ask[String](Greet("tcp", _))(stringCodec)

@@ -1,6 +1,6 @@
 package xplat.core.persistence
 
-import xplat.core.api.{Behavior, Behaviors, Codec}
+import xplat.core.api.{Behavior, Codec}
 import xplat.core.persistence.api.{Effects, Journal, JournalBuilder}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
@@ -13,7 +13,7 @@ trait Persistence[F[_]] {
       commandHandler: (State, Command) => F[Effects[Event]],
       eventHandler: (State, Event) => State,
       config: Persistence.Config = Persistence.Config()
-  )(implicit stateCodec: Codec[State, Array[Byte]], eventCode: Codec[Event, Array[Byte]]): Behaviors[F, Command] => Behavior[F, Command]
+  )(implicit stateCodec: Codec[State, Array[Byte]], eventCode: Codec[Event, Array[Byte]]): Behavior[F, Command]
 
 }
 
@@ -30,7 +30,7 @@ object Persistence {
       p: Persistence[F],
       stateCodec: Codec[State, Array[Byte]],
       eventCode: Codec[Event, Array[Byte]]
-  ): Behaviors[F, Command] => Behavior[F, Command] = p.build(
+  ): Behavior[F, Command] = p.build(
     name,
     initialState,
     commandHandler,

@@ -6,7 +6,7 @@ import cats.effect.syntax.all._
 import cats.implicits._
 import org.typelevel.log4cats.{Logger => Log4Cats}
 import xplat.core.api.error.MailboxOverflow
-import xplat.core.api.{ActorRef, Context}
+import xplat.core.api.{ActorRef, Behaviors, Context}
 import xplat.core.sharding.api.{Entity, EntityContext, EntityTypeKey}
 
 import scala.concurrent.duration._
@@ -66,7 +66,7 @@ private[sharding] final class LocalShard[F[_], T](
   private def spawn(entityId: String): F[ActorRef[F, T]] =
     for {
       now <- Clock[F].monotonic
-      ref <- holder.spawn[T](entityId, entity.mailbox)(b => entity.behavior(context(entityId))(b))
+      ref <- holder.spawn[T](entityId, entity.mailbox)(entity.behavior(context(entityId)))
       _   <- entities.update(_.updated(entityId, Active(ref, now)))
       _   <- supervisor.supervise(ref.terminated >> onTerminated(entityId, ref))
     } yield ref
@@ -137,7 +137,7 @@ private[sharding] object LocalShard {
     val holderName = s"${entity.typeKey.name}-$shardId"
     for {
       holderCtx <- Deferred[F, Context[F, Unit]]
-      holderRef <- guardian.spawn[Unit](holderName)(b => b.context(ctx => holderCtx.complete(ctx).as(b.same)))
+      holderRef <- guardian.spawn[Unit](holderName)(Behaviors.setup(ctx => holderCtx.complete(ctx).void))
       ctx       <- holderCtx.get
       entities  <- Ref.of[F, Map[String, EntityState[F, T]]](Map.empty)
       lock      <- Semaphore[F](1)

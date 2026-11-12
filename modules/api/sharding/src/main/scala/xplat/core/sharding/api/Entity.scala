@@ -23,7 +23,7 @@ import xplat.core.api.{Behavior, Behaviors, Codec, Mailbox}
   */
 final case class Entity[F[_], T](
     typeKey: EntityTypeKey[T],
-    behavior: EntityContext[F, T] => Behaviors[F, T] => Behavior[F, T],
+    behavior: EntityContext[F, T] => Behavior[F, T],
     config: ShardingConfig = ShardingConfig(),
     shardIdExtractor: ShardIdExtractor = ShardIdExtractor.hashCode(Entity.DefaultNumberOfShards),
     stopMessage: Option[T] = None,
@@ -40,6 +40,6 @@ final case class Entity[F[_], T](
 object Entity {
   val DefaultNumberOfShards: Int = 100
 
-  def apply[F[_], T](typeKey: EntityTypeKey[T])(behavior: EntityContext[F, T] => Behaviors[F, T] => Behavior[F, T])(implicit codec: Codec[T, Array[Byte]]): Entity[F, T] =
+  def apply[F[_], T](typeKey: EntityTypeKey[T])(behavior: EntityContext[F, T] => Behavior[F, T])(implicit codec: Codec[T, Array[Byte]]): Entity[F, T] =
     new Entity[F, T](typeKey, behavior)
 }

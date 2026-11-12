@@ -17,8 +17,8 @@ final case class IOActorSystem[F[_]](private val context: Context[F, Nothing])(i
 
   override def name: String = context.name
 
-  override def spawn[T](name: String, mailbox: Mailbox)(builder: BehaviorBuilder[F, T]): F[ActorRef[F, T]] = {
-    context.spawn(name, mailbox)(builder)
+  override def spawn[T](name: String, mailbox: Mailbox)(behavior: Behavior[F, T]): F[ActorRef[F, T]] = {
+    context.spawn(name, mailbox)(behavior)
   }
 
   override def schedule[T](f: => F[T], delay: FiniteDuration): F[Cancelable[F]] = {
@@ -43,7 +43,7 @@ object IOActorSystem {
         for {
           root <- A.uncancelable(poll => Actor[F, Nothing](
             name = name,
-            behavior = Behaviors[F, Nothing]().same,
+            behavior = Behaviors.same[F, Nothing],
             parentPath = Seq("xplat"),
             mailbox = Mailbox.Unbounded,
             notifyShutdown = (stopped: Deferred[F, Unit]) => stopped.complete(()).void,
@@ -364,7 +364,7 @@ object IOActorSystem {
     override def name: String = actor.name
     override def path: String = actor.path
     override def self: ActorRef[F, T] = actor
-    override def spawn[A](name: String, mailbox: Mailbox)(b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = actor.spawn[A](name, mailbox, b)
+    override def spawn[A](name: String, mailbox: Mailbox)(b: Behavior[F, A]): F[ActorRef[F, A]] = actor.spawn[A](name, mailbox, b)
     override def pipe(msg: T): F[Unit] = actor.pipe(msg)
     override def signal(signal: Signal): F[Unit] = actor.signal(signal)
     override def stopChild(name: String): F[Unit] = actor.stopChild(name)
@@ -415,7 +415,7 @@ object IOActorSystem {
       * Only the setup of the child's behavior can be cancelled. Whatever ends the build, `built` is completed, because
       * stopping this actor waits on it to stop the child.
       */
-    def spawn[A](childName: String, childMailbox: Mailbox, b: BehaviorBuilder[F, A]): F[ActorRef[F, A]] = {
+    def spawn[A](childName: String, childMailbox: Mailbox, b: Behavior[F, A]): F[ActorRef[F, A]] = {
       Deferred[F, Option[Actor[F, A]]].flatMap { built =>
         val link = Link[F](childName, built.get.flatMap(_.traverse_(_.stop())))
 
@@ -429,7 +429,7 @@ object IOActorSystem {
           A.defer(
             Actor[F, A](
               name = childName,
-              behavior = b(Behaviors[F, A]()),
+              behavior = b,
               parentPath = parentPath :+ self.name,
               mailbox = childMailbox,
               notifyShutdown = (released: Deferred[F, Unit]) => push(Command.ChildDown(childName, released)).handleErrorWith(_ => released.complete(()).void),

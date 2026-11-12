@@ -5,7 +5,7 @@ import cats.effect.{IO, Ref, Resource}
 import cats.implicits._
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
-import xplat.core.api.Behavior
+import xplat.core.api.{Behavior, Behaviors}
 import xplat.core.cluster.ClusterSingleton
 import xplat.core.cluster.api._
 import xplat.core.coordination.LeaseUsage
@@ -22,7 +22,7 @@ class IOClusterSingletonTest extends AsyncFreeSpec with AsyncIOSpec with Matcher
 
   /** A singleton that answers with the node it runs on. Each node defines it with its own resolver. */
   private def whereAmI(n: Node, config: SingletonConfig = SingletonConfig(handOverRetryInterval = 100.millis), stopMessage: Option[Greet] = None): SingletonActor[IO, Greet] =
-    SingletonActor[IO, Greet]("where", (b: xplat.core.api.Behaviors[IO, Greet]) => b.message(g => g.replyTo ! s"${n.address.port}:${g.name}"): Behavior[IO, Greet], config, stopMessage)(
+    SingletonActor[IO, Greet]("where", Behaviors.message(g => g.replyTo ! s"${n.address.port}:${g.name}"): Behavior[IO, Greet], config, stopMessage)(
       greetCodec(n.cluster.refResolver)
     )
 
@@ -67,8 +67,7 @@ class IOClusterSingletonTest extends AsyncFreeSpec with AsyncIOSpec with Matcher
         def recording(n: Node): SingletonActor[IO, Greet] =
           SingletonActor[IO, Greet](
             "recording",
-            (b: xplat.core.api.Behaviors[IO, Greet]) =>
-              b.message(g => if (g.name == "stop") log.update(_ :+ s"stop@${n.address.port}").as(b.stop) else IO(g.replyTo ! "ok").as(b.same)),
+            (Behaviors.message(g => if (g.name == "stop") Behaviors.pipe(log.update(_ :+ s"stop@${n.address.port}").as(Behaviors.stop)) else IO(g.replyTo ! "ok").void)): Behavior[IO, Greet], // typed: SingletonActor.apply is overloaded
             SingletonConfig(handOverRetryInterval = 100.millis),
             stopMessage = Some(Greet("stop", null))
           )(greetCodec(n.cluster.refResolver))

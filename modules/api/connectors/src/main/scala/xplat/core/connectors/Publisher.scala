@@ -2,7 +2,7 @@ package xplat.core.connectors
 
 import cats.MonadThrow
 import cats.implicits._
-import xplat.core.api.{ActorRef, ActorSystem, BehaviorBuilder, ReplyTo}
+import xplat.core.api.{ActorRef, ActorSystem, Behavior, Behaviors, ReplyTo}
 
 /** Writes messages to one topic, queue or stream. `publish` completes once the broker has stored the message. */
 trait Publisher[F[_], T] {
@@ -31,15 +31,15 @@ object Publisher {
   }
 
   /** An actor that publishes the messages it receives, one at a time and in order. */
-  def actor[F[_], T](publisher: Publisher[F, T])(implicit F: MonadThrow[F]): BehaviorBuilder[F, Publish[T]] = b =>
-    b.context { ctx =>
-      b.message { case Publish(message, replyTo) =>
+  def actor[F[_], T](publisher: Publisher[F, T])(implicit F: MonadThrow[F]): Behavior[F, Publish[T]] =
+    Behaviors.setup { ctx =>
+      Behaviors.message { case Publish(message, replyTo) =>
         publisher.publish(message).attempt.flatMap {
           case Right(_) => F.unit.map(_ => replyTo.foreach(_ ! Result.Published))
           case Left(error) =>
             ctx.log.warn(s"cannot publish to ${publisher.destination}: ${error.getMessage}", error) >>
               F.unit.map(_ => replyTo.foreach(_ ! Result.Failed(String.valueOf(error.getMessage))))
-        }.as(b.same)
+        } // F[Unit]: keeps the same behavior
       }
     }
 

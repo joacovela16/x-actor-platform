@@ -342,15 +342,15 @@ object IOClusterShardingTest {
 
   /** Counter entity that answers `Get` with "<node port>:<count>". `onPassivate` runs once the shard is passivating it. */
   def counter(port: Int, resolver: RefResolver[IO], config: ShardingConfig, onPassivate: IO[Unit] = IO.unit): Entity[IO, Cmd] = {
-    def running(b: Behaviors[IO, Cmd], ctx: EntityContext[IO, Cmd], count: Int): Behavior[IO, Cmd] =
-      b.message {
-        case Inc       => running(b, ctx, count + 1)
-        case Passivate => (ctx.passivate >> onPassivate).as(b.same)
+    def running(ctx: EntityContext[IO, Cmd], count: Int): Behavior[IO, Cmd] =
+      Behaviors.message {
+        case Inc       => running(ctx, count + 1)
+        case Passivate => (ctx.passivate >> onPassivate).void
         case Get(replyTo) =>
           replyTo ! s"$port:$count"
-          b.same
+          Behaviors.same
       }
-    Entity[IO, Cmd](Key)(ctx => b => running(b, ctx, 0))(codec(resolver)).withConfig(config)
+    Entity[IO, Cmd](Key)(ctx => running(ctx, 0))(codec(resolver)).withConfig(config)
   }
 
   val GatedKey: EntityTypeKey[Cmd] = EntityTypeKey[Cmd]("gated")
@@ -359,16 +359,16 @@ object IOClusterShardingTest {
     * in shard "0", so a blocked shard would also block the other entities.
     */
   def gated(started: Deferred[IO, Unit], gate: Deferred[IO, Unit], resolver: RefResolver[IO]): Entity[IO, Cmd] = {
-    def running(b: Behaviors[IO, Cmd], count: Int): Behavior[IO, Cmd] =
-      b.message {
-        case Inc if count == 0 => b.pipe(started.complete(()) >> gate.get.as(running(b, 1)))
-        case Inc               => running(b, count + 1)
-        case Passivate         => b.same
+    def running(count: Int): Behavior[IO, Cmd] =
+      Behaviors.message {
+        case Inc if count == 0 => Behaviors.pipe(started.complete(()) >> gate.get.as(running(1)))
+        case Inc               => running(count + 1)
+        case Passivate         => Behaviors.same
         case Get(replyTo) =>
           replyTo ! count.toString
-          b.same
+          Behaviors.same
       }
-    Entity[IO, Cmd](GatedKey)(_ => b => running(b, 0))(codec(resolver))
+    Entity[IO, Cmd](GatedKey)(_ => running(0))(codec(resolver))
       .withShardIdExtractor(_ => "0")
       .withMailbox(Mailbox.bounded(1, Mailbox.Overflow.Fail))
   }

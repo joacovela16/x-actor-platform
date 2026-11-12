@@ -6,7 +6,7 @@ import cats.effect.syntax.all._
 import cats.implicits._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger => Log4Cats}
-import xplat.core.api.{ActorSystem, Context}
+import xplat.core.api.{ActorSystem, Behaviors, Context}
 import xplat.core.cluster.Cluster
 import xplat.core.cluster.api.SplitBrainStrategy.{LeaseMajority, LocalStrategy}
 import xplat.core.cluster.api._
@@ -98,7 +98,7 @@ final class IOCluster[F[_]] private (
         current.get(name) match {
           case Some(existing) => (current, existing.get)
           case None =>
-            val create = system.spawn[Unit](s"cluster-$name")(b => b.context(ctx => fresh.complete(ctx).as(b.same))) >> fresh.get
+            val create = system.spawn[Unit](s"cluster-$name")(Behaviors.setup(ctx => fresh.complete(ctx).void)) >> fresh.get
             (current.updated(name, fresh), create)
         }
       }.flatten
