@@ -7,6 +7,7 @@ import { SubflowInputs } from './SubflowInputs';
 import { AggregationsEditor, ExprField, MapSetEditor } from './ExprEditor';
 import { SpecForm, type Override } from './SpecForm';
 import { Input } from '@/components/ui/input';
+import { ComboInput } from '@/components/ui/combo-input';
 
 interface Props {
   kind: string;
@@ -15,6 +16,8 @@ interface Props {
   onChange: (params: Record<string, JsonValue>) => void;
   /** Rutas declaradas en el flujo, para autocompletar. */
   paths: string[];
+  /** En un nodo de stream: los campos del elemento que entra por cada entrada. */
+  elementPaths?: Record<string, string[]>;
 }
 
 /** Nodos de stream cuyo `where` es una condición sobre el elemento. */
@@ -30,6 +33,12 @@ export function isStatePathField(kind: string, field: ConfigField): boolean {
   if (field.name.toLowerCase().includes('path')) return true;
   if (kind === 'queue.publish' && (field.name === 'payload' || field.name === 'key')) return true;
   return /path in the state/i.test(field.description ?? '');
+}
+
+/** Campos de un nodo de stream que son una ruta dentro del elemento (no del estado): se sugieren los campos del elemento. */
+export function isElementPathField(kind: string, field: ConfigField): boolean {
+  if (!kind.startsWith('stream.') || kind === 'stream.source.list' || field.type.type !== 'str') return false;
+  return ['path', 'key', 'leftKey', 'rightKey', 'into'].includes(field.name);
 }
 
 /** Conexiones guardadas, una sola petición por montaje del formulario. */
@@ -51,10 +60,23 @@ function useConnections(enabled: boolean): Connection[] {
  * quedan los widgets de composición propios de algunos nodos (cron, expresiones, mapas de stream, subflujos) y la
  * lista de conexiones de `queue.publish`.
  */
-export function ConfigForm({ kind, schema, params, onChange, paths }: Props) {
+export function ConfigForm({ kind, schema, params, onChange, paths, elementPaths = {} }: Props) {
   const connections = useConnections(kind === 'queue.publish');
   const listId = useId();
   const overrides: Override = (field, { value, set, values }) => {
+    if (isElementPathField(kind, field)) {
+      const side = field.name === 'leftKey' ? 'left' : field.name === 'rightKey' ? 'right' : 'in';
+      return (
+        <ComboInput
+          className="font-mono"
+          aria-label={field.name}
+          value={typeof value === 'string' ? value : ''}
+          options={elementPaths[side] ?? []}
+          placeholder={(elementPaths[side] ?? []).length ? 'elige un campo del elemento o escribe…' : 'campo del elemento, p. ej. items'}
+          onChange={(t) => set(t === '' ? undefined : t)}
+        />
+      );
+    }
     if (kind === 'core.cron' && field.name === 'expression') {
       return (
         <CronField

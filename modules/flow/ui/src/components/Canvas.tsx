@@ -27,6 +27,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'rea
 import type { CatalogEntry, FlowDef, NodeRole, SideEffects } from '../api/types';
 import type { NodeShape } from '../hooks/usePorts';
 import { ERROR_PORT, edgeKey } from '../graph/graph';
+import type { ElementTypes } from '../graph/elementTypes';
 import { fmtClock, fmtCountdown } from '../graph/time';
 import { findSegments, inputOf, isStreamEdge, renderDataType, segmentIndexOf, streamOf } from '../graph/stream';
 import { Badge } from '@/components/ui/badge';
@@ -322,6 +323,8 @@ interface Props {
   readOnly?: boolean;
   /** Clase extra por clave de arista (p. ej. edge-fired / edge-dead). */
   edgeClasses?: Record<string, string>;
+  /** Tipos de elemento inferidos de cada stream (el lienzo los muestra en las aristas). */
+  elementTypes?: ElementTypes;
   onNodeClick?: (id: string) => void;
 }
 
@@ -409,7 +412,7 @@ function Board(p: Props) {
         const key = edgeKey(e);
         const active = p.trace?.activeEdges.has(key);
         const isStream = isStreamEdge(e, p.shapes);
-        const out = streamOf(p.shapes[e.from], e.port);
+        const out = p.elementTypes?.outputs[`${e.from}.${e.port}`] ?? streamOf(p.shapes[e.from], e.port);
         const extra = p.edgeClasses?.[key] ?? '';
         const common = {
           id: key,
@@ -442,7 +445,7 @@ function Board(p: Props) {
           data: { problem: p.edgeProblems[key], onDelete },
         } as FEdge;
       }),
-    [p.flow.edges, p.trace, p.edgeClasses, p.shapes, p.edgeProblems, p.running, p.readOnly, selectedEdges],
+    [p.flow.edges, p.trace, p.edgeClasses, p.shapes, p.edgeProblems, p.running, p.readOnly, selectedEdges, p.elementTypes],
   );
 
   const onNodesChange = (changes: NodeChange<FNode>[]) => {

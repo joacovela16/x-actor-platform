@@ -13,6 +13,7 @@ import { TestPanel, type TraceView } from '../components/TestPanel';
 import { useEntities } from '../hooks/useEntities';
 import { usePorts } from '../hooks/usePorts';
 import { AppContext } from '../App';
+import { elementPaths, inferElementTypes } from '../graph/elementTypes';
 import { declaredPaths, edgeKey, fallbackPosition, newNodeDef, wouldCreateCycle } from '../graph/graph';
 import { edgeProblem, findSegments, type EdgeProblem, type NodeIO } from '../graph/stream';
 import type { RunStatus } from '../components/RunPanel';
@@ -189,6 +190,8 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
   // Las rutas declaradas, con los campos de los objetos y las entidades que declaran (`${state.order.customer}`).
   const { byName: entities } = useEntities();
   const paths = useMemo(() => (doc ? declaredPaths(doc, entities) : []), [doc, entities]);
+  // El tipo de los elementos de cada stream, inferido de lo que el flujo declara.
+  const elementTypes = useMemo(() => (doc ? inferElementTypes(doc, shapes as Record<string, NodeIO>, entities) : undefined), [doc, shapes, entities]);
 
   // ---- mutaciones -------------------------------------------------------
 
@@ -504,6 +507,7 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
           running={running}
           trace={trace}
           readOnly={readOnly}
+          elementTypes={elementTypes}
           onSelect={select}
           onMove={moveNodes}
           onRemoveNodes={removeNodes}
@@ -543,6 +547,7 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
                   .map((message): FlowError => ({ code: 'invalid-params', node: selectedNode.id, message })),
               ]}
               paths={paths}
+              elementPaths={Object.fromEntries(Object.entries(elementTypes?.inputs[selectedNode.id] ?? {}).map(([input, t]) => [input, elementPaths(t, entities)]))}
               onChange={(patch) => updateNode(selectedNode.id, patch)}
               onRename={(newId) => renameNode(selectedNode.id, newId)}
               onDelete={() => removeNodes([selectedNode.id])}

@@ -21,6 +21,8 @@ interface Props {
   role: NodeRole;
   errors: FlowError[];
   paths: string[];
+  /** Campos del elemento que entra por cada entrada de stream (`in`, `left`, `right`), para sugerir. */
+  elementPaths?: Record<string, string[]>;
   onChange: (patch: Partial<NodeDef>) => void;
   onRename: (newId: string) => string | null;
   onDelete: () => void;
@@ -33,7 +35,7 @@ const RUN_ACTIONS: SelectOption<RunAction>[] = [
   { value: 'skip', label: 'saltar y reutilizar resultado' },
 ];
 
-export function NodeProperties({ node, entry, flow, ports, role, errors, paths, onChange, onRename, onDelete }: Props) {
+export function NodeProperties({ node, entry, flow, ports, role, errors, paths, elementPaths, onChange, onRename, onDelete }: Props) {
   const { toast, catalog } = useContext(AppContext);
   const [idDraft, setIdDraft] = useState(node.id);
   const [idError, setIdError] = useState<string | null>(null);
@@ -129,6 +131,7 @@ export function NodeProperties({ node, entry, flow, ports, role, errors, paths, 
               params={node.params as Record<string, JsonValue>}
               onChange={(params) => onChange({ params })}
               paths={paths}
+              elementPaths={elementPaths}
             />
           </ScriptEnvContext.Provider>
         ) : (
