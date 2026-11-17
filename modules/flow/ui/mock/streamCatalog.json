@@ -1,0 +1,1236 @@
+[
+ {
+  "kind": "stream.aggregate",
+  "category": "Stream operators",
+  "label": "Aggregate",
+  "config": {
+   "fields": [
+    {
+     "name": "aggregations",
+     "type": {
+      "type": "any"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Name -> {op: count|sum|avg|min|max|first|last|collect, path}"
+    },
+    {
+     "name": "key",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path of the key to group by"
+    },
+    {
+     "name": "over",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "stream",
+     "secret": false,
+     "oneOf": [
+      "stream",
+      "items"
+     ]
+    },
+    {
+     "name": "emit",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "end",
+     "secret": false,
+     "oneOf": [
+      "end",
+      "each"
+     ]
+    },
+    {
+     "name": "limit",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 1000,
+     "secret": false,
+     "oneOf": [],
+     "description": "Most values a `collect` keeps"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.dedupe",
+  "category": "Stream operators",
+  "label": "Deduplicate",
+  "config": {
+   "fields": [
+    {
+     "name": "key",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path of the key in the element; the whole element if empty"
+    },
+    {
+     "name": "max",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 10000,
+     "secret": false,
+     "oneOf": [],
+     "description": "How many keys to remember"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.filter",
+  "category": "Stream operators",
+  "label": "Filter",
+  "config": {
+   "fields": [
+    {
+     "name": "where",
+     "type": {
+      "type": "any"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Condition, such as {\"gt\": [{\"path\": \"total\"}, 100]}"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.flatMap",
+  "category": "Stream operators",
+  "label": "Flat map",
+  "config": {
+   "fields": [
+    {
+     "name": "path",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path of the list inside the element"
+    },
+    {
+     "name": "merge",
+     "type": {
+      "type": "bool"
+     },
+     "required": false,
+     "default": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Items that are objects keep the other fields of the element"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.join",
+  "category": "Stream operators",
+  "label": "Join by key",
+  "config": {
+   "fields": [
+    {
+     "name": "leftKey",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path of the key in the elements of `left`"
+    },
+    {
+     "name": "rightKey",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path of the key in the elements of `right`"
+    },
+    {
+     "name": "maxBuffer",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 10000,
+     "secret": false,
+     "oneOf": [],
+     "description": "How many keys to keep of each side"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "left",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "right",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.map",
+  "category": "Stream operators",
+  "label": "Map",
+  "config": {
+   "fields": [
+    {
+     "name": "set",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "default": {},
+     "secret": false,
+     "oneOf": [],
+     "description": "Field -> expression, such as {\"total\": {\"mul\": [{\"path\": \"price\"}, {\"path\": \"qty\"}]}}"
+    },
+    {
+     "name": "remove",
+     "type": {
+      "type": "list",
+      "element": {
+       "type": "str"
+      }
+     },
+     "required": false,
+     "default": [],
+     "secret": false,
+     "oneOf": []
+    },
+    {
+     "name": "replace",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Expression whose value replaces the element"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.merge",
+  "category": "Stream operators",
+  "label": "Merge",
+  "config": {
+   "fields": []
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.sink.collect",
+  "category": "Stream sinks",
+  "label": "Collect",
+  "config": {
+   "fields": [
+    {
+     "name": "limit",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 1000,
+     "secret": false,
+     "oneOf": [],
+     "description": "Most elements to keep"
+    },
+    {
+     "name": "path",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Collect this field of each element; the whole element if empty"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out"
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "sink",
+  "defaultOutputs": [
+   {
+    "name": "result",
+    "target": "collected",
+    "type": {
+     "type": "list",
+     "element": {
+      "type": "any"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "kind": "stream.sink.flow",
+  "category": "Stream sinks",
+  "label": "Run flow for each",
+  "config": {
+   "fields": [
+    {
+     "name": "flowId",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "The flow to run"
+    },
+    {
+     "name": "revision",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Revision of the flow; the latest if empty"
+    },
+    {
+     "name": "inputs",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "default": {},
+     "secret": false,
+     "oneOf": [],
+     "description": "Input of the flow -> path of the field of the element, or $ for all of it"
+    },
+    {
+     "name": "wait",
+     "type": {
+      "type": "bool"
+     },
+     "required": false,
+     "default": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "The element is done when the flow ends"
+    },
+    {
+     "name": "parallel",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 1,
+     "secret": false,
+     "oneOf": [],
+     "description": "Flows that run at the same time"
+    }
+   ]
+  },
+  "sideEffects": "write",
+  "ports": [
+   {
+    "name": "out"
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "sink",
+  "defaultOutputs": [
+   {
+    "name": "result",
+    "target": "flowsRun",
+    "type": {
+     "type": "num"
+    }
+   }
+  ]
+ },
+ {
+  "kind": "stream.sink.http",
+  "category": "Stream sinks",
+  "label": "HTTP",
+  "config": {
+   "fields": [
+    {
+     "name": "url",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": []
+    },
+    {
+     "name": "method",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "POST",
+     "secret": false,
+     "oneOf": [
+      "PATCH",
+      "POST",
+      "PUT"
+     ]
+    },
+    {
+     "name": "headers",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "default": {},
+     "secret": false,
+     "oneOf": [],
+     "description": "Headers to send, as text"
+    },
+    {
+     "name": "timeoutSeconds",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 30,
+     "secret": false,
+     "oneOf": []
+    }
+   ]
+  },
+  "sideEffects": "write",
+  "ports": [
+   {
+    "name": "out"
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "sink",
+  "defaultOutputs": [
+   {
+    "name": "result",
+    "target": "sent",
+    "type": {
+     "type": "num"
+    }
+   }
+  ]
+ },
+ {
+  "kind": "stream.sink.publish",
+  "category": "Stream sinks",
+  "label": "Publish each",
+  "config": {
+   "fields": [
+    {
+     "name": "connection",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Name of the connection (Kafka, ActiveMQ or Redis)"
+    },
+    {
+     "name": "destination",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Topic, queue or stream"
+    },
+    {
+     "name": "destinationType",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "queue",
+     "secret": false,
+     "oneOf": [
+      "queue",
+      "topic"
+     ],
+     "description": "ActiveMQ only"
+    },
+    {
+     "name": "key",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path in the element of the key that orders messages"
+    },
+    {
+     "name": "format",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "json",
+     "secret": false,
+     "oneOf": [
+      "json",
+      "text"
+     ]
+    },
+    {
+     "name": "headers",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "default": {},
+     "secret": false,
+     "oneOf": [],
+     "description": "Fixed headers, as text"
+    }
+   ]
+  },
+  "sideEffects": "write",
+  "ports": [
+   {
+    "name": "out"
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "sink",
+  "defaultOutputs": [
+   {
+    "name": "result",
+    "target": "published",
+    "type": {
+     "type": "num"
+    }
+   }
+  ]
+ },
+ {
+  "kind": "stream.sink.reduce",
+  "category": "Stream sinks",
+  "label": "Reduce",
+  "config": {
+   "fields": [
+    {
+     "name": "op",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "count",
+     "secret": false,
+     "oneOf": [
+      "all",
+      "any",
+      "avg",
+      "count",
+      "max",
+      "min",
+      "sum"
+     ]
+    },
+    {
+     "name": "path",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Field of each element (not for count)"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out"
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "sink",
+  "defaultOutputs": [
+   {
+    "name": "result",
+    "target": "reduced",
+    "type": {
+     "type": "num"
+    }
+   }
+  ]
+ },
+ {
+  "kind": "stream.source.cron",
+  "category": "Stream sources",
+  "label": "Cron ticks",
+  "config": {
+   "fields": [
+    {
+     "name": "expression",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Cron expression, 5 or 6 fields"
+    },
+    {
+     "name": "timezone",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "UTC",
+     "secret": false,
+     "oneOf": []
+    },
+    {
+     "name": "maxTicks",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Stop after this many ticks; without it, never"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "obj",
+     "fields": {
+      "at": {
+       "type": "num"
+      }
+     }
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in"
+   }
+  ],
+  "role": "source",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.source.list",
+  "category": "Stream sources",
+  "label": "List",
+  "config": {
+   "fields": [
+    {
+     "name": "path",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Path in the state of a list: each item is an element"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in"
+   }
+  ],
+  "role": "source",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.source.queue",
+  "category": "Stream sources",
+  "label": "Queue",
+  "config": {
+   "fields": [
+    {
+     "name": "connection",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Name of the connection (Kafka, ActiveMQ or Redis)"
+    },
+    {
+     "name": "source",
+     "type": {
+      "type": "str"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Topic, queue or stream to read"
+    },
+    {
+     "name": "group",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Consumer group; servers that share it share the messages"
+    },
+    {
+     "name": "destinationType",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "queue",
+     "secret": false,
+     "oneOf": [
+      "queue",
+      "topic"
+     ],
+     "description": "ActiveMQ only"
+    },
+    {
+     "name": "format",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "json",
+     "secret": false,
+     "oneOf": [
+      "json",
+      "text"
+     ]
+    },
+    {
+     "name": "envelope",
+     "type": {
+      "type": "bool"
+     },
+     "required": false,
+     "default": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Give the key, headers and position with the body"
+    }
+   ]
+  },
+  "sideEffects": "read",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in"
+   }
+  ],
+  "role": "source",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.source.range",
+  "category": "Stream sources",
+  "label": "Range",
+  "config": {
+   "fields": [
+    {
+     "name": "from",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 0,
+     "secret": false,
+     "oneOf": []
+    },
+    {
+     "name": "to",
+     "type": {
+      "type": "num"
+     },
+     "required": true,
+     "secret": false,
+     "oneOf": [],
+     "description": "Up to, not including"
+    },
+    {
+     "name": "step",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 1,
+     "secret": false,
+     "oneOf": []
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "num"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in"
+   }
+  ],
+  "role": "source",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.throttle",
+  "category": "Stream operators",
+  "label": "Throttle",
+  "config": {
+   "fields": [
+    {
+     "name": "elements",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "default": 1,
+     "secret": false,
+     "oneOf": []
+    },
+    {
+     "name": "per",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "1 second",
+     "secret": false,
+     "oneOf": [],
+     "description": "A length of time such as '1 second'"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.window",
+  "category": "Stream operators",
+  "label": "Window",
+  "config": {
+   "fields": [
+    {
+     "name": "kind",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "tumbling",
+     "secret": false,
+     "oneOf": [
+      "tumbling",
+      "sliding"
+     ]
+    },
+    {
+     "name": "by",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "default": "count",
+     "secret": false,
+     "oneOf": [
+      "count",
+      "time"
+     ]
+    },
+    {
+     "name": "size",
+     "type": {
+      "type": "num"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Elements in a window (by count)"
+    },
+    {
+     "name": "duration",
+     "type": {
+      "type": "str"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Length of a window (by time), such as '10 seconds'"
+    },
+    {
+     "name": "every",
+     "type": {
+      "type": "any"
+     },
+     "required": false,
+     "secret": false,
+     "oneOf": [],
+     "description": "Sliding: the step, in elements (by count) or time (by time)"
+    }
+   ]
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "obj",
+     "fields": {
+      "items": {
+       "type": "list",
+       "element": {
+        "type": "any"
+       }
+      },
+      "count": {
+       "type": "num"
+      }
+     }
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "in",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ },
+ {
+  "kind": "stream.zip",
+  "category": "Stream operators",
+  "label": "Zip",
+  "config": {
+   "fields": []
+  },
+  "sideEffects": "pure",
+  "ports": [
+   {
+    "name": "out",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "error"
+   }
+  ],
+  "inputs": [
+   {
+    "name": "left",
+    "stream": {
+     "type": "any"
+    }
+   },
+   {
+    "name": "right",
+    "stream": {
+     "type": "any"
+    }
+   }
+  ],
+  "role": "operator",
+  "defaultOutputs": []
+ }
+]

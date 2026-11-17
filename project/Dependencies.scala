@@ -40,6 +40,10 @@ object Dependencies {
 
     val doobie: String = "1.0.0-RC9"
 
+    val http4s: String = "0.23.32"
+    // GraalJS runs on a plain JDK 17+ (interpreter mode, slower than on GraalVM itself).
+    val graal: String = "24.1.2"
+
     val fs2Kafka: String = "3.9.1"
     val redis4cats: String = "2.0.6"
     val jakartaJms: String = "3.1.0"
@@ -57,6 +61,7 @@ object Dependencies {
     val catsFS2 = Def.setting("co.fs2" %%% "fs2-core" % Versions.catsFS2)
     val catsFS2IO = "co.fs2" %% "fs2-io" % Versions.catsFS2
     val catsMtl = Def.setting("org.typelevel" %%% "cats-mtl" % Versions.catsMtl)
+    val catsEffectTestkit = "org.typelevel" %% "cats-effect-testkit" % Versions.catsEffects
     val catsLogger = Def.setting("org.typelevel" %%% "log4cats-core" % Versions.catsLogger)
 
     val catsLoggerConsole = Def.setting("org.typelevel" %%% "log4cats-js-console" % Versions.catsLogger)
@@ -81,6 +86,23 @@ object Dependencies {
     val jakartaJms = "jakarta.jms" % "jakarta.jms-api" % Versions.jakartaJms
     val artemisClient = "org.apache.activemq" % "artemis-jakarta-client" % Versions.artemis
     val activemqClassicClient = "org.apache.activemq" % "activemq-client" % Versions.activemqClassic
+
+    // http (flow module)
+    val http4sDsl = "org.http4s" %% "http4s-dsl" % Versions.http4s
+    val http4sCirce = "org.http4s" %% "http4s-circe" % Versions.http4s
+    val http4sEmberServer = "org.http4s" %% "http4s-ember-server" % Versions.http4s
+    val http4sEmberClient = "org.http4s" %% "http4s-ember-client" % Versions.http4s
+
+    // traces of the flow server: the OpenTelemetry SDK and its OTLP exporter, sending with the JDK's HTTP client (no OkHttp).
+    val openTelemetry: Seq[ModuleID] = Seq(
+      "io.opentelemetry" % "opentelemetry-sdk" % "1.49.0",
+      ("io.opentelemetry" % "opentelemetry-exporter-otlp" % "1.49.0").exclude("io.opentelemetry", "opentelemetry-exporter-sender-okhttp"),
+      "io.opentelemetry" % "opentelemetry-exporter-sender-jdk" % "1.49.0"
+    )
+
+    // scripts (flow module): the JavaScript engine. `js` is a pom that brings the language and the Truffle runtime.
+    val graalPolyglot = "org.graalvm.polyglot" % "polyglot" % Versions.graal
+    val graalJs = ("org.graalvm.polyglot" % "js" % Versions.graal).pomOnly()
 
     val chill = "com.twitter" %% "chill" % Versions.chill
 

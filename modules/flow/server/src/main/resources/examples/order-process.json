@@ -1,0 +1,28 @@
+{
+  "flow": {
+    "id": "example-order-process",
+    "name": "Example: process the orders of the queue",
+    "inputs": [{"name": "order", "target": "order", "type": {"type": "any"}}],
+    "outputs": [],
+    "nodes": [
+      {"id": "price", "kind": "script.js", "label": "Total, taxes and shipping",
+       "params": {"code": "const o = state.order;\nconst subtotal = o.items.reduce((s, i) => s + i.qty * i.price, 0);\nconst tax = Math.round(subtotal * 0.21 * 100) / 100;\nconst shipping = subtotal >= 100 ? 0 : 9.9;\nconst total = Math.round((subtotal + tax + shipping) * 100) / 100;\nlog(`order ${o.id}: subtotal ${subtotal}, total ${total}`);\nreturn { values: { invoice: { orderId: o.id, subtotal: subtotal, tax: tax, shipping: shipping, total: total } } };"},
+       "outputs": [{"name": "invoice", "target": "invoice", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "reserve", "kind": "script.js", "label": "Reserve the stock",
+       "params": {"code": "const o = state.order;\nconst reserved = o.items.map(i => ({ sku: i.sku, qty: i.qty, warehouse: i.sku.charCodeAt(0) % 2 === 0 ? 'north' : 'south' }));\nlog(`order ${o.id}: ${reserved.length} lines reserved`);\nreturn { values: { reservation: { orderId: o.id, lines: reserved } } };"},
+       "outputs": [{"name": "reservation", "target": "reservation", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "ship", "kind": "script.js", "label": "Plan the shipment",
+       "params": {"code": "const o = state.order, inv = state.invoice, r = state.reservation;\nconst warehouses = [...new Set(r.lines.map(l => l.warehouse))];\nconst shipment = { orderId: o.id, customer: o.customer, packages: warehouses.length, from: warehouses, charge: inv.total, status: 'ready' };\nlog(`order ${o.id}: ${shipment.packages} package(s), ${inv.total} charged`);\nreturn { values: { shipment: shipment } };"},
+       "outputs": [{"name": "shipment", "target": "shipment", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"}
+    ],
+    "edges": [
+      {"from": "price", "port": "out", "to": "ship"},
+      {"from": "reserve", "port": "out", "to": "ship"}
+    ],
+    "layout": {"price": {"x": 0, "y": 0}, "reserve": {"x": 0, "y": 160}, "ship": {"x": 320, "y": 80}}
+  },
+  "trigger": {"id": "example-order-process", "flowId": "example-order-process", "kind": "queue", "connection": "orders-queue", "queue": "orders", "group": "order-processing", "inputs": {"order": "${message.body}"}}
+}

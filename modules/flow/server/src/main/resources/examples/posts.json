@@ -1,0 +1,24 @@
+{
+  "flow": {
+    "id": "example-posts",
+    "name": "Example: posts as JSON",
+    "inputs": [{"name": "user", "target": "user", "type": {"type": "any"}}],
+    "outputs": [],
+    "nodes": [
+      {"id": "fetch", "kind": "http.request", "label": "Ask the fake API for posts",
+       "params": {"method": "GET", "url": "https://jsonplaceholder.typicode.com/posts", "query": {"userId": "${state.user}"}},
+       "outputs": [{"name": "body", "target": "posts", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "shape", "kind": "script.js", "label": "Keep id, title and a preview",
+       "params": {"code": "const posts = state.posts || [];\nconst summary = posts.slice(0, 10).map(p => ({ id: p.id, user: p.userId, title: p.title, preview: p.body.split('\\n')[0] }));\nlog(`${posts.length} posts, ${summary.length} kept`);\nreturn { values: { summary: { count: posts.length, posts: summary } } };"},
+       "outputs": [{"name": "summary", "target": "summary", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "reply", "kind": "core.respond", "label": "Answer the JSON",
+       "params": {"status": 200, "body": "summary"},
+       "outputs": [], "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"}
+    ],
+    "edges": [{"from": "fetch", "port": "out", "to": "shape"}, {"from": "shape", "port": "out", "to": "reply"}],
+    "layout": {"fetch": {"x": 0, "y": 0}, "shape": {"x": 300, "y": 0}, "reply": {"x": 600, "y": 0}}
+  },
+  "trigger": {"id": "example-posts", "flowId": "example-posts", "kind": "http", "method": "GET", "path": "examples/posts", "inputs": {"user": "${request.query.user}"}, "response": "sync"}
+}

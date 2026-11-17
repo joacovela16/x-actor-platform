@@ -1,0 +1,31 @@
+{
+  "connection": {"name": "orders-queue", "kind": "redis", "params": {"uri": "redis://localhost:6379"}},
+  "flow": {
+    "id": "example-order-in",
+    "name": "Example: an order arrives and goes to the queue",
+    "inputs": [{"name": "order", "target": "order", "type": {"type": "any"}}],
+    "outputs": [],
+    "nodes": [
+      {"id": "validate", "kind": "script.js", "label": "Validate the order and give it an id",
+       "params": {"code": "const o = state.order || {};\nif (!o.customer) throw new Error('the order has no customer');\nif (!Array.isArray(o.items) || o.items.length === 0) throw new Error('the order has no items');\nfor (const i of o.items) if (!i.sku || !(i.qty > 0) || !(i.price >= 0)) throw new Error('every item needs sku, qty > 0 and price');\nconst id = o.id || ('ord-' + Date.now().toString(36));\nlog(`order ${id} of ${o.customer}: ${o.items.length} items`);\nreturn { values: { order: Object.assign({}, o, { id: id, receivedAt: new Date().toISOString() }), accepted: { id: id, status: 'queued' } } };"},
+       "outputs": [{"name": "order", "target": "order", "type": {"type": "any"}}, {"name": "accepted", "target": "accepted", "type": {"type": "any"}}],
+       "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "enqueue", "kind": "queue.publish", "label": "Publish it to the orders stream",
+       "params": {"connection": "orders-queue", "destination": "orders", "payload": "order", "key": "order.id"},
+       "outputs": [], "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "reply", "kind": "core.respond", "label": "202: queued",
+       "params": {"status": 202, "body": "accepted"},
+       "outputs": [], "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"},
+      {"id": "reject", "kind": "core.respond", "label": "400: not a valid order",
+       "params": {"status": 400},
+       "outputs": [], "runPolicy": {"whenSucceeded": "run", "whenFailed": "run"}, "joinPolicy": "all"}
+    ],
+    "edges": [
+      {"from": "validate", "port": "out", "to": "enqueue"},
+      {"from": "validate", "port": "error", "to": "reject"},
+      {"from": "enqueue", "port": "out", "to": "reply"}
+    ],
+    "layout": {"validate": {"x": 0, "y": 0}, "enqueue": {"x": 300, "y": 0}, "reply": {"x": 600, "y": 0}, "reject": {"x": 300, "y": 160}}
+  },
+  "trigger": {"id": "example-order-in", "flowId": "example-order-in", "kind": "http", "method": "POST", "path": "examples/orders", "inputs": {"order": "${request.body}"}, "response": "sync"}
+}

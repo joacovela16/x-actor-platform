@@ -1,0 +1,125 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* daisyUI con dos temas propios: «flow» (claro) y «flow-dark». Sin data-theme manda prefers-color-scheme. */
+@plugin "daisyui" {
+  themes: false;
+}
+
+@plugin "daisyui/theme" {
+  name: "flow";
+  default: true;
+  color-scheme: light;
+  --color-base-100: oklch(0.993 0.003 255);
+  --color-base-200: oklch(0.952 0.01 255);
+  --color-base-300: oklch(0.905 0.012 258);
+  --color-base-content: oklch(0.27 0.025 262);
+  --color-primary: oklch(0.5 0.15 268);
+  --color-primary-content: oklch(0.985 0.005 268);
+  --color-secondary: oklch(0.945 0.012 262);
+  --color-secondary-content: oklch(0.3 0.03 262);
+  --color-accent: oklch(0.94 0.025 268);
+  --color-accent-content: oklch(0.3 0.06 268);
+  --color-neutral: oklch(0.3 0.025 262);
+  --color-neutral-content: oklch(0.97 0.005 262);
+  --color-info: oklch(0.52 0.17 260);
+  --color-info-content: oklch(0.98 0.01 260);
+  --color-success: oklch(0.52 0.14 150);
+  --color-success-content: oklch(0.98 0.01 150);
+  --color-warning: oklch(0.55 0.13 75);
+  --color-warning-content: oklch(0.98 0.01 75);
+  --color-error: oklch(0.577 0.245 27.325);
+  --color-error-content: oklch(0.98 0.01 27);
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.625rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "flow-dark";
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: oklch(0.225 0.016 262);
+  --color-base-200: oklch(0.185 0.014 262);
+  --color-base-300: oklch(0.32 0.018 262);
+  --color-base-content: oklch(0.92 0.012 262);
+  --color-primary: oklch(0.74 0.12 268);
+  --color-primary-content: oklch(0.2 0.03 268);
+  --color-secondary: oklch(0.28 0.02 262);
+  --color-secondary-content: oklch(0.9 0.012 262);
+  --color-accent: oklch(0.3 0.04 268);
+  --color-accent-content: oklch(0.92 0.02 268);
+  --color-neutral: oklch(0.85 0.012 262);
+  --color-neutral-content: oklch(0.2 0.02 262);
+  --color-info: oklch(0.75 0.13 255);
+  --color-info-content: oklch(0.2 0.03 255);
+  --color-success: oklch(0.78 0.16 155);
+  --color-success-content: oklch(0.2 0.03 155);
+  --color-warning: oklch(0.8 0.14 80);
+  --color-warning-content: oklch(0.2 0.03 80);
+  --color-error: oklch(0.704 0.191 22.216);
+  --color-error-content: oklch(0.2 0.03 22);
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.625rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Texto secundario, para el CSS propio (en JSX: text-base-content/60). */
+:root {
+  --muted-content: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+}
+
+/* Un color por familia de nodos (prefijo del kind), para leer un flujo de un vistazo. */
+:root {
+    --cat-core: oklch(0.6 0.02 262);
+    --cat-db: oklch(0.6 0.13 230);
+    --cat-mongo: oklch(0.6 0.14 150);
+    --cat-http: oklch(0.62 0.15 40);
+    --cat-queue: oklch(0.6 0.15 300);
+    --cat-stream: oklch(0.62 0.13 195);
+    --cat-script: oklch(0.7 0.14 85);
+    --cat-ai: oklch(0.58 0.18 330);
+}
+[data-theme="flow-dark"] {
+    --cat-core: oklch(0.65 0.02 262);
+    --cat-db: oklch(0.7 0.11 230);
+    --cat-mongo: oklch(0.72 0.13 150);
+    --cat-http: oklch(0.72 0.13 45);
+    --cat-queue: oklch(0.7 0.13 300);
+    --cat-stream: oklch(0.72 0.11 195);
+    --cat-script: oklch(0.78 0.12 85);
+    --cat-ai: oklch(0.7 0.15 330);
+}
+.cat-core { --cat: var(--cat-core); }
+.cat-db { --cat: var(--cat-db); }
+.cat-mongo { --cat: var(--cat-mongo); }
+.cat-http { --cat: var(--cat-http); }
+.cat-queue { --cat: var(--cat-queue); }
+.cat-stream { --cat: var(--cat-stream); }
+.cat-script { --cat: var(--cat-script); }
+.cat-ai { --cat: var(--cat-ai); }
+
+
+@layer base {
+  * { border-color: var(--color-base-300); }
+  html, body { @apply bg-base-200 text-base-content; }
+  /* Escala única: 14px de base (como la UI densa de un editor), 12px para lo secundario. */
+  html { font-family: var(--font-sans); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  code, pre, kbd, samp, .font-mono { font-family: var(--font-mono); }
+}
