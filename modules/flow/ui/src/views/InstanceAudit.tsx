@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { DeadLettersPanel } from '../components/DeadLettersPanel';
 import { api, subscribeInstance } from '../api/client';
 import type { AuditEntry, AuditTrail, DeadLetter, FlowDef, JsonValue, NodeMetrics } from '../api/types';
 import { Canvas, type Trace } from '../components/Canvas';
@@ -183,6 +184,8 @@ export function InstanceAudit({ id }: { id: string }) {
           )}
         </div>
       </div>
+
+      {!running && <DeadLettersPanel instanceId={inst.id} />}
 
       <Card className="audit-head flex flex-col gap-2 p-3">
         <div><span className="text-xs text-base-content/60">origen</span> {originText(inst.origin)}</div>

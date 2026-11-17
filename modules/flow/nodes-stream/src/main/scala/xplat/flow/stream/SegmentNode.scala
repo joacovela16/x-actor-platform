@@ -154,7 +154,7 @@ final class SegmentNode[F[_]](
                     if (effects == SideEffects.Pure || (effects == SideEffects.Read && sim.realReads)) source.open(ctx) else Stream.empty
                 }
             }
-        publish(elements.interruptWhen(unwanted.as(true)))
+        publish(elements.map(e => e.copy(origin = Some(e.value), source = Some(m.id))).interruptWhen(unwanted.as(true)))
 
       case operator: StreamOperator[F] => publish(operator(ctx, upstreams))
 

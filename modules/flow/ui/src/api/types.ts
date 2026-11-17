@@ -225,6 +225,17 @@ export interface DeadLetter {
   error: string;
   element: JsonValue;
   at: number;
+  /** Lo que dio la fuente, y cuál (para volver a publicarlo). */
+  origin?: JsonValue;
+  source?: string;
+}
+
+/** `GET /api/instances/{id}/dead-letters`: cada uno numerado, y si se puede volver a publicar en su cola. */
+export interface InstanceDeadLetter extends DeadLetter {
+  index: number;
+  segment: string;
+  reinjectable: boolean;
+  sourceKind?: string;
 }
 
 /** Estado de un nodo en `GET /api/instances/{id}`: `pending|running|succeeded|failed|skipped` (el backend nunca manda `dead`). */

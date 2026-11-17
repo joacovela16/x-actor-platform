@@ -1,6 +1,6 @@
 import type {
   AuditTrail, CatalogEntry, Connection, ConnectionClient, ConnectionKind, Describe, Draft, EntityCheck, EntityDef, EntityError, FlowDef,
-  FlowError, FlowSummary, FlowTestResult, Instance, InstanceEvent, InstanceSummary, JsonValue, Mock, ScheduleView, Trace, Trigger, PluginStatus, BundlePlan, Health } from './types';
+  FlowError, FlowSummary, FlowTestResult, Instance, InstanceDeadLetter, InstanceEvent, InstanceSummary, JsonValue, Mock, ScheduleView, Trace, Trigger, PluginStatus, BundlePlan, Health } from './types';
 import { normalizeInstanceSummary, normalizeTrail } from '../graph/audit';
 
 const BASE = '/api';
@@ -162,6 +162,10 @@ export const api = {
 
   simulate: (flowId: string, body: { flow: FlowDef; inputs: JsonValue; mocks: Record<string, Mock> }) =>
     request<Trace>('POST', `/flows/${enc(flowId)}/test`, body),
+
+  deadLetters: (instanceId: string) => request<InstanceDeadLetter[]>('GET', `/instances/${enc(instanceId)}/dead-letters`),
+  reinject: (instanceId: string, indexes?: number[]) =>
+    request<{ reinjected: number; skipped: Array<{ index: number; reason: string }> }>('POST', `/instances/${enc(instanceId)}/dead-letters/reinject`, { indexes: indexes ?? [] }),
 
   runTests: (flowId: string, flow: FlowDef) =>
     request<{ passed: boolean; results: FlowTestResult[] }>('POST', `/flows/${enc(flowId)}/tests`, { flow }),

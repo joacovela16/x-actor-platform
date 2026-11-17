@@ -20,10 +20,10 @@ import xplat.flow.mongo.{MongoNodes, MongoPlugin}
 import xplat.flow.nodes.{ClientPool, Connections, EntityPlugin, FlowRunner, Traces}
 import xplat.flow.http._
 import xplat.flow.rest.HttpPlugin
-import xplat.flow.queue.QueuePlugin
+import xplat.flow.queue.{PublisherFactory, PublisherPool, QueuePlugin}
 import xplat.flow.plugin.{FlowPlugin, PluginLoader, PluginStatus}
 import xplat.flow.script.{ScriptNodes, ScriptPlugin}
-import xplat.flow.stream.StreamPlugin
+import xplat.flow.stream.{DeadLetterRoutes, StreamPlugin}
 
 import scala.concurrent.duration._
 
@@ -178,7 +178,9 @@ object FlowServer {
         io.circe.Encoder[List[PluginStatus]].apply(plugins.statuses),
         entities = Some(entityStore),
         metrics = Some(MetricsRoutes.Sources(flowMetrics, triggerSources, Some(clients))),
-        tracing = tracing
+        tracing = tracing,
+        // The dead letters of the stream segments, and publishing them again to the queue they came from.
+        extra = Some(DeadLetterRoutes[F](engine, named, PublisherPool.on[F](clients, PublisherFactory.connectors[F])))
       )
       server <- EmberServerBuilder
         .default[F]

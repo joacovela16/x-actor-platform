@@ -14,8 +14,11 @@ import xplat.flow.model.Port
   * @param port
   *   the output port of the node it leaves through. Almost every node has only `out`; one that routes elements (see [[BranchOp]])
   *   says which. It is set back to `out` when the element enters the next node.
+  * @param origin
+  *   what it was when its source gave it, and `source` which source that was: a dead letter keeps them, so the message can be
+  *   published again to the queue it came from. An element made of several (a window, a pair) has none.
   */
-final case class Elem[F[_]](value: Json, at: Long, ack: F[Unit], port: String = Port.Out) {
+final case class Elem[F[_]](value: Json, at: Long, ack: F[Unit], port: String = Port.Out, origin: Option[Json] = None, source: Option[String] = None) {
 
   /** Another value, which is what is made of this element: it has its place and its acknowledgement. */
   def withValue(v: Json): Elem[F] = copy(value = v)

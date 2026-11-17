@@ -262,6 +262,9 @@ class SegmentNodeTest extends StreamSpec {
       letters.size shouldBe 1
       letters.head.hcursor.get[String]("node") shouldBe Right("map")
       letters.head.hcursor.get[Json]("element") shouldBe Right(json("""{"z":2}"""))
+      // What the source gave, and which source: to publish it again.
+      letters.head.hcursor.get[Json]("origin") shouldBe Right(json("""{"z":2}"""))
+      letters.head.hcursor.get[String]("source") shouldBe Right("src")
       count(metricsOf(o, "map"), "failed") shouldBe 1
     }
   }

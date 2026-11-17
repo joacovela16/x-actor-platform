@@ -38,7 +38,10 @@ final class StreamContext[F[_]](
   def fail(e: Elem[F], error: String): F[Unit] =
     for {
       at <- now
-      letter = Json.obj("node" -> Json.fromString(node.id), "error" -> Json.fromString(error), "element" -> e.value, "at" -> Json.fromLong(at))
+      letter = Json.fromFields(
+        List("node" -> Json.fromString(node.id), "error" -> Json.fromString(error), "element" -> e.value, "at" -> Json.fromLong(at)) ++
+          e.origin.map("origin" -> _) ++ e.source.map(s => "source" -> Json.fromString(s))
+      )
       _ <- deadLetters.update(d => if (d.size < deadLetterLimit) d :+ letter else d)
       _ <- metrics.failed
       _ <- e.ack

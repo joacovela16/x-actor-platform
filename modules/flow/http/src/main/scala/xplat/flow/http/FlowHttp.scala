@@ -23,12 +23,13 @@ object FlowHttp {
       staticRoot: String = "/public",
       entities: Option[EntityStore[F]] = None,
       metrics: Option[MetricsRoutes.Sources[F]] = None,
-      tracing: Option[xplat.flow.engine.FlowTracing[F]] = None
+      tracing: Option[xplat.flow.engine.FlowTracing[F]] = None,
+      extra: Option[HttpRoutes[F]] = None
   ): HttpRoutes[F] =
     ErrorHandler(
       FlowRoutes(engine, deployments, drafts) <+> AdminRoutes(engine, triggers, connections, clients, plugins) <+>
         entities.fold(HttpRoutes.empty[F])(EntityRoutes(engine, _)) <+>
         BundleRoutes(new Bundle.Service[F](engine, triggers, connections, deployments, drafts, entities)) <+>
-        metrics.fold(HttpRoutes.empty[F])(MetricsRoutes(_)) <+> HookRoutes(engine, triggers, secrets, tracing) <+> StaticRoutes(staticRoot)
+        metrics.fold(HttpRoutes.empty[F])(MetricsRoutes(_)) <+> HookRoutes(engine, triggers, secrets, tracing) <+> extra.getOrElse(HttpRoutes.empty[F]) <+> StaticRoutes(staticRoot)
     )
 }
