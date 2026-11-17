@@ -18,8 +18,8 @@ final class ChangesOp[F[_]](implicit F: Temporal[F]) extends StreamOperator[F] {
     StreamPorts.key(ctx.params) match {
       case Left(problem) => Stream.raiseError[F](new IllegalArgumentException(problem))
       case Right(key) =>
-        Stream.eval(Ref.of[F, Option[Json]](None)).flatMap { last =>
-          in.evalMapFilter { e =>
+        Stream.eval(Ref.of[F, Option[Json]](ctx.restored.flatMap(_.hcursor.downField("last").focus))).flatMap { last =>
+          Stream.exec(ctx.keep(last.get.map(l => Json.fromFields(l.map("last" -> _).toList)))) ++ in.evalMapFilter { e =>
             StreamPorts.keyOf(key, e.value) match {
               case Left(error) => ctx.fail(e, error).as(Option.empty[Elem[F]])
               case Right(k)    => last.getAndSet(Some(k)).flatMap(before => if (before.contains(k)) ctx.drop(e).as(Option.empty[Elem[F]]) else F.pure(Option(e)))

@@ -19,8 +19,8 @@ final class ScanOp[F[_]](implicit F: Temporal[F]) extends StreamOperator[F] {
     ScanOp.params(ctx.params) match {
       case Left(problem) => Stream.raiseError[F](new IllegalArgumentException(problem))
       case Right((init, step)) =>
-        Stream.eval(Ref.of[F, Json](init)).flatMap { acc =>
-          in.evalMapFilter { e =>
+        Stream.eval(Ref.of[F, Json](ctx.restored.getOrElse(init))).flatMap { acc =>
+          Stream.exec(ctx.keep(acc.get)) ++ in.evalMapFilter { e =>
             acc.get.flatMap { current =>
               step.eval(Json.obj("acc" -> current, "elem" -> e.value)) match {
                 case Right(next) => acc.set(next).as(Option(ctx.element(e, next)))

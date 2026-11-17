@@ -85,6 +85,8 @@ object FlowServer {
       slot = (name: String, restricted: Boolean) =>
         state.map(_.slot(name)).orElse(Option.when(inFiles)(JsonSlot.file[F](config.dataDir.resolve(s"$name.json"), restricted)))
       secrets <- Resource.eval(SecretStore.inSlot[F](slot("secrets", true)))
+      // What nodes keep across restarts: the checkpoints of the operators of stream segments.
+      nodeState <- Resource.eval(JsonStateStore.inSlot[F](slot("node-state", false)))
       // The clients of connections (MongoDB, JDBC pools, publishers) are opened once and lent to the nodes. When a connection is
       // edited or deleted, its clients are closed as soon as they are returned.
       clients <- ClientPool.make[F](config.pool)
@@ -107,7 +109,8 @@ object FlowServer {
           FlowRunner.later(runnerLater.get),
           metrics,
           entitiesLater.get.flatten,
-          tracing.fold(Traces.none[F])(t => t)
+          tracing.fold(Traces.none[F])(t => t),
+          nodeState
         ),
         ConnectionKind.defaults.map(_.kind).toSet,
         line => Console[F].errorln(line),

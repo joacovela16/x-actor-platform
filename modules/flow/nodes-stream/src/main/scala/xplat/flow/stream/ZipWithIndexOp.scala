@@ -13,7 +13,12 @@ final class ZipWithIndexOp[F[_]](implicit F: Temporal[F]) extends StreamOperator
 
   def apply(ctx: StreamContext[F], inputs: Map[String, Stream[F, Elem[F]]]): Stream[F, Elem[F]] = {
     val in = inputs.getOrElse(Port.In, Stream.empty)
-    in.zipWithIndex.map { case (e, i) => ctx.element(e, Json.obj("value" -> e.value, "index" -> Json.fromLong(i))) }
+    // The next index is its checkpoint: after a restart the numbers go on.
+    val start = ctx.restored.flatMap(_.asNumber).flatMap(_.toLong).getOrElse(0L)
+    Stream.eval(Ref.of[F, Long](start)).flatMap { next =>
+      Stream.exec(ctx.keep(next.get.map(Json.fromLong))) ++
+        in.evalMap(e => next.getAndUpdate(_ + 1).map(i => ctx.element(e, Json.obj("value" -> e.value, "index" -> Json.fromLong(i)))))
+    }
   }
 }
 

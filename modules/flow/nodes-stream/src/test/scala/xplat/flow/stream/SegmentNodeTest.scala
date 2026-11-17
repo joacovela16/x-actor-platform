@@ -59,10 +59,17 @@ class SegmentNodeTest extends StreamSpec {
   private def out(name: String, tpe: DataType = DataType.AnyJson) = OutputDecl(name, path(s"out.$name"), tpe)
   private def node(id: String, kind: String, params: Json = Json.obj(), outputs: List[OutputDecl] = Nil) = NodeDef(id, kind, params, outputs)
 
-  private final class Rig(extra: List[StreamNodeType[IO]], settings: SegmentNode.Settings, val metrics: SegmentMetrics[IO]) {
+  /** A [[xplat.flow.nodes.StateStore]] in memory, to see what segments keep. */
+  private final class MemoryState(val all: Ref[IO, Map[String, Json]]) extends xplat.flow.nodes.StateStore[IO] {
+    def get(key: String): IO[Option[Json]] = all.get.map(_.get(key))
+    def put(key: String, value: Json): IO[Unit] = all.update(_.updated(key, value))
+    def delete(key: String): IO[Unit] = all.update(_ - key)
+  }
+
+  private final class Rig(extra: List[StreamNodeType[IO]], settings: SegmentNode.Settings, val metrics: SegmentMetrics[IO], state: Option[xplat.flow.nodes.StateStore[IO]] = None) {
     val types: List[StreamNodeType[IO]] = StreamNodes.types[IO](noConnections, noConsumers, noPool, noRunner) ++ extra
     val catalog: NodeCatalog = StreamNodes.catalog ++ CoreNodes.catalog ++ new NodeCatalog(extra.map(_.descriptor))
-    val segment = new SegmentNode[IO](types.map(t => t.descriptor.kind -> t).toMap, metrics, settings)
+    val segment = new SegmentNode[IO](types.map(t => t.descriptor.kind -> t).toMap, metrics, settings, state)
 
     def plan(flow: FlowDef): NodeDef = StreamSegments.condense(flow, catalog).nodes.find(_.kind == StreamSegments.SegmentKind).get
 
@@ -472,6 +479,40 @@ class SegmentNodeTest extends StreamSpec {
     } yield {
       o.error.get should include("stream.nope")
       bad.failed shouldBe true
+    }
+  }
+  "the state of the operators is kept while the segment runs, given back when it runs again, and dropped when it ends well" in {
+    val f = flow(
+      List(
+        node("src", ListSource.Kind, json("""{"path": "xs"}""")),
+        node("sum", ScanOp.Kind, json("""{"init": 0, "step": {"add": [{"path": "acc"}, {"path": "elem"}]}}""")),
+        node("boom", "test.boom"),
+        node("all", CollectSink.Kind, Json.obj(), List(out("rows")))
+      ),
+      List(Edge("src", "sum"), Edge("sum", "boom"), Edge("boom", "all"))
+    )
+    val ok = flow(
+      List(node("src", ListSource.Kind, json("""{"path": "xs"}""")), node("sum", ScanOp.Kind, json("""{"init": 0, "step": {"add": [{"path": "acc"}, {"path": "elem"}]}}""")), node("all", CollectSink.Kind, Json.obj(), List(out("rows")))),
+      List(Edge("src", "sum"), Edge("sum", "all"))
+    )
+    for {
+      all <- Ref.of[IO, Map[String, Json]](Map.empty)
+      store = new MemoryState(all)
+      metrics <- SegmentMetrics.inMemory[IO]
+      r = new Rig(List(new Boom), SegmentNode.Settings(reportEvery = 20.millis, checkpointEvery = 1.hour), metrics, Some(store))
+      // The sums are 1, 2, 3: the last one makes it fail, when scan has seen everything. What it had is kept.
+      failed <- r.run(f, json("""{"xs": [1, 1, 1]}"""))
+      kept <- all.get
+      key = s"segment/inst/${r.plan(f).id}"
+      // It runs again (after a restart) and goes on from 3.
+      _ <- all.set(Map(s"segment/inst/${r.plan(ok).id}" -> kept(key)))
+      again <- r.run(ok, json("""{"xs": [10]}"""))
+      after <- all.get
+    } yield {
+      failed.failed shouldBe true
+      kept(key) shouldBe json("""{"sum": 3}""")
+      again.values("all.rows") shouldBe json("[13]") // 3 + 10
+      after shouldBe empty
     }
   }
 }

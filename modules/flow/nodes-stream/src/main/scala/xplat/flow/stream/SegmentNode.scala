@@ -9,7 +9,7 @@ import fs2.concurrent.SignallingRef
 import io.circe.Json
 import xplat.flow.engine.{SegmentMetrics, Simulator}
 import xplat.flow.model._
-import xplat.flow.nodes.NodeType
+import xplat.flow.nodes.{NodeType, StateStore}
 
 import scala.concurrent.duration._
 
@@ -38,7 +38,8 @@ import scala.concurrent.duration._
 final class SegmentNode[F[_]](
     types: Map[String, StreamNodeType[F]],
     metrics: SegmentMetrics[F],
-    settings: SegmentNode.Settings = SegmentNode.Settings()
+    settings: SegmentNode.Settings = SegmentNode.Settings(),
+    state: Option[StateStore[F]] = None
 )(implicit F: Async[F])
     extends NodeType[F] {
 
@@ -66,14 +67,25 @@ final class SegmentNode[F[_]](
       results <- Ref.of[F, Vector[Map[String, Json]]](Vector.empty)
       links <- plan.edges.traverse(_ => (Queue.bounded[F, Option[Elem[F]]](settings.capacity), SignallingRef.of[F, Boolean](false)).mapN((q, c) => SegmentNode.Link[F](q, c)))
       edgeQueues = plan.edges.zip(links)
+      // Checkpoints of the operators with state: given back if the segment runs again (after a restart), saved every so often.
+      store = state.filter(_ => !simulated)
+      key = s"segment/${input.instanceId}/${input.nodeId}"
+      restored <- store.fold(F.pure(Map.empty[String, Json]))(_.get(key).map(_.flatMap(_.asObject).fold(Map.empty[String, Json])(_.toMap)))
+      keepers <- Ref.of[F, Map[String, F[Json]]](Map.empty)
+      checkpoint = store.fold(F.unit) { s =>
+        keepers.get.flatMap(_.toList.traverse { case (id, read) => read.map(id -> _) }).flatMap(kv => F.whenA(kv.nonEmpty)(s.put(key, Json.fromFields(kv))))
+      }
       nodesJson = perNode.traverse { case (id, m) => m.snapshot.map(id -> _) }.map(Json.fromFields)
       snapshot = (nodesJson, dead.get).mapN((n, d) => Json.obj("nodes" -> n, "deadLetters" -> Json.fromValues(d)))
-      streams = plan.members.map(m => member(plan, input, m, mm(m.id), dead, results, edgeQueues, clock, simulated))
+      streams = plan.members.map(m => member(plan, input, m, mm(m.id), dead, results, edgeQueues, clock, simulated, restored.get(m.id), keepers))
+      saver = if (store.isEmpty) Stream.empty else Stream.fixedDelay[F](settings.checkpointEvery).evalMap(_ => checkpoint)
       reporter =
         if (simulated) Stream.empty
         else Stream.fixedDelay[F](settings.reportEvery).evalMap(_ => snapshot.flatMap(s => metrics.report(input.instanceId, input.nodeId, s)))
       // If the instance is cancelled this is cancelled too: the sources are closed and what it reported is dropped.
-      outcome <- Stream.emits(streams).covary[F].parJoinUnbounded.concurrently(reporter).compile.drain.attempt.onCancel(metrics.clear(input.instanceId, input.nodeId))
+      outcome <- Stream.emits(streams).covary[F].parJoinUnbounded.concurrently(reporter).concurrently(saver).compile.drain.attempt.onCancel(metrics.clear(input.instanceId, input.nodeId))
+      // Done: nothing to give back. Failed: what it had is kept, for when the instance runs it again.
+      _ <- store.fold(F.unit)(s => outcome.fold(_ => checkpoint, _ => s.delete(key))).attempt
       nodes <- nodesJson
       letters <- dead.get
       _ <- metrics.clear(input.instanceId, input.nodeId)
@@ -95,9 +107,11 @@ final class SegmentNode[F[_]](
       results: Ref[F, Vector[Map[String, Json]]],
       edgeQueues: List[(Edge, SegmentNode.Link[F])],
       clock: F[Long],
-      simulated: Boolean
+      simulated: Boolean,
+      restored: Option[Json],
+      keepers: Ref[F, Map[String, F[Json]]]
   ): Stream[F, Unit] = {
-    val ctx = new StreamContext[F](m, input, simulated, mine, dead, clock, settings.deadLetterLimit)
+    val ctx = new StreamContext[F](m, input, simulated, mine, dead, clock, settings.deadLetterLimit, restored, Some(keepers))
     val incoming = edgeQueues.filter(_._1.to == m.id)
     val outgoing = edgeQueues.filter(_._1.from == m.id)
 
@@ -204,8 +218,10 @@ object SegmentNode {
     *   how many elements of the beginning each node keeps as a sample.
     * @param deadLetterLimit
     *   how many dead letters a segment keeps; the ones after are counted, not kept.
+    * @param checkpointEvery
+    *   how often the state of the operators that have one is saved (see [[StreamContext.keep]]).
     */
-  final case class Settings(capacity: Int = 16, reportEvery: FiniteDuration = 1.second, sampleSize: Int = 5, deadLetterLimit: Int = 100)
+  final case class Settings(capacity: Int = 16, reportEvery: FiniteDuration = 1.second, sampleSize: Int = 5, deadLetterLimit: Int = 100, checkpointEvery: FiniteDuration = 10.seconds)
 
   /** What the simulator adds to the parameters of a segment: what its sources answer, by the id of the node. */
   final case class Simulation(mocks: Map[String, Json], realReads: Boolean)

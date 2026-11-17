@@ -4,7 +4,7 @@ import cats.Applicative
 import cats.effect.kernel.{Async, Resource}
 import xplat.flow.engine.SegmentMetrics
 import xplat.flow.entity.{EntityCatalog, EntityDef}
-import xplat.flow.nodes.{ClientPool, ConnectionKind, Connections, FlowRunner, NodeType, Traces, TriggerSource}
+import xplat.flow.nodes.{ClientPool, ConnectionKind, Connections, FlowRunner, NodeType, StateStore, Traces, TriggerSource}
 
 /** What a plugin brings to the server: kinds of node, kinds of connection and entities of the business model. Every node of the
   * server comes from a plugin: the built-in ones (`core`, `db`, `stream`...) implement this same trait.
@@ -62,6 +62,8 @@ object FlowPlugin {
     *   the entities of the business model as they are each time they are asked for.
     * @param traces
     *   the `traceparent` of a running node, for the nodes that call other systems to send it on.
+    * @param state
+    *   where nodes keep what has to outlive a restart (the checkpoints of stream segments).
     */
   final case class Context[F[_]](
       connections: Connections[F],
@@ -69,13 +71,14 @@ object FlowPlugin {
       runner: FlowRunner[F],
       metrics: SegmentMetrics[F],
       entities: F[EntityCatalog],
-      traces: Traces[F]
+      traces: Traces[F],
+      state: StateStore[F]
   )
 
   object Context {
 
     /** A context with only connections and clients: no flows to run, metrics that go nowhere, no entities. For tests and tools. */
     def basic[F[_]: Applicative](connections: Connections[F], clients: ClientPool[F]): Context[F] =
-      Context(connections, clients, FlowRunner.none[F], SegmentMetrics.none[F], Applicative[F].pure(EntityCatalog.empty), Traces.none[F])
+      Context(connections, clients, FlowRunner.none[F], SegmentMetrics.none[F], Applicative[F].pure(EntityCatalog.empty), Traces.none[F], StateStore.none[F])
   }
 }

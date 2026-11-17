@@ -16,6 +16,8 @@ import scala.concurrent.duration.FiniteDuration
   *   what the segment received: the global state at the moment it started, and which instance it is.
   * @param simulated
   *   the segment is part of a simulation: nothing waits for real time, and what has effects outside is not done.
+  * @param restored
+  *   what the node kept in the last checkpoint of this segment, if it is being run again after a restart (see [[keep]]).
   */
 final class StreamContext[F[_]](
     val node: NodeDef,
@@ -24,8 +26,16 @@ final class StreamContext[F[_]](
     metrics: NodeMetrics[F],
     deadLetters: Ref[F, Vector[Json]],
     val now: F[Long],
-    deadLetterLimit: Int
+    deadLetterLimit: Int,
+    val restored: Option[Json] = None,
+    keepers: Option[Ref[F, Map[String, F[Json]]]] = None
 )(implicit val F: Temporal[F]) {
+
+  /** For a node with state (a `scan`, a `dedupe`): how to read it, so that the segment can save it every so often and give it back
+    * in [[restored]] if the segment is run again after a restart. What it saves is a snapshot, not tied to the acknowledgements: the
+    * elements taken after it and not acknowledged come again, and can count twice in a state like a sum.
+    */
+  def keep(state: F[Json]): F[Unit] = keepers.fold(F.unit)(_.update(_ + (node.id -> state)))
 
   def params: Json = node.params
 

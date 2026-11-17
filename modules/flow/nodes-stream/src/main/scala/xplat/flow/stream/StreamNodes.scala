@@ -3,7 +3,7 @@ package xplat.flow.stream
 import cats.effect.{Async, Resource}
 import xplat.flow.engine.SegmentMetrics
 import xplat.flow.model.{NodeCatalog, StreamSegments}
-import xplat.flow.nodes.{Connections, FlowRunner, NodeType, Traces}
+import xplat.flow.nodes.{Connections, FlowRunner, NodeType, StateStore, Traces}
 import xplat.flow.queue.{ConsumerFactory, PublisherFactory, PublisherPool}
 
 /** The nodes that process streams, to give to the engine.
@@ -112,10 +112,11 @@ object StreamNodes {
       runner: FlowRunner[F],
       settings: SegmentNode.Settings = SegmentNode.Settings(),
       extra: List[StreamNodeType[F]] = Nil,
-      traces: Option[Traces[F]] = None
+      traces: Option[Traces[F]] = None,
+      state: Option[StateStore[F]] = None
   )(implicit F: Async[F]): List[NodeType[F]] = {
     val all = types[F](connections, consumers, pool, runner, extra, traces)
-    new SegmentNode[F](all.map(t => t.descriptor.kind -> t).toMap, metrics, settings) :: all.map(new StreamMember[F](_))
+    new SegmentNode[F](all.map(t => t.descriptor.kind -> t).toMap, metrics, settings, state) :: all.map(new StreamMember[F](_))
   }
 
   /** The nodes for the engine's `runnerNodes`, with the broker consumers and publishers of the connectors. The publishers it opens

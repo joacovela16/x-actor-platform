@@ -23,7 +23,8 @@ final class StreamPlugin(extra: StreamPlugin.Extra = StreamPlugin.Extra.none, se
           context.runner,
           settings,
           extra[F](context),
-          Some(context.traces)
+          Some(context.traces),
+          Some(context.state)
         )
       )
     )

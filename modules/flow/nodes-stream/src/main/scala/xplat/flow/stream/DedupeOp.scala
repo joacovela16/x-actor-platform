@@ -18,8 +18,10 @@ final class DedupeOp[F[_]](implicit F: Temporal[F]) extends StreamOperator[F] {
     DedupeOp.params(ctx.params) match {
       case Left(problem) => Stream.raiseError[F](new IllegalArgumentException(problem))
       case Right((key, max)) =>
-        Stream.eval(Ref.of[F, (Set[String], Vector[String])]((Set.empty, Vector.empty))).flatMap { seen =>
-          inputs.getOrElse(Port.In, Stream.empty).evalFilter { e =>
+        // The keys it remembers are its checkpoint: after a restart a message that comes again is still a duplicate.
+        val initial = ctx.restored.flatMap(_.as[Vector[String]].toOption).getOrElse(Vector.empty).takeRight(max)
+        Stream.eval(Ref.of[F, (Set[String], Vector[String])]((initial.toSet, initial))).flatMap { seen =>
+          Stream.exec(ctx.keep(seen.get.map(s => Json.fromValues(s._2.map(Json.fromString))))) ++ inputs.getOrElse(Port.In, Stream.empty).evalFilter { e =>
             val id = key.fold(Option(e.value.noSpaces))(_.get(e.value).map(_.noSpaces))
             id match {
               case None => ctx.fail(e, s"'${key.get}' is not in the element").as(false)
