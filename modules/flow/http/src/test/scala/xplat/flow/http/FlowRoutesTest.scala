@@ -220,5 +220,30 @@ class FlowRoutesTest extends HttpSpec {
         badMock.status shouldBe Status.BadRequest
       }
     }
+
+    "run the cases the flow keeps, and say which do not hold and why" in withApp { app =>
+      val tests = List(
+        FlowTest("approved", json("""{"approved":true,"order":7}"""), expect = FlowTest.Expect(Some("succeeded"), Some(json("""{"order":7}""")), visited = List("ok"), notVisited = List("no"))),
+        FlowTest("wrong", json("""{"approved":false,"order":7}"""), expect = FlowTest.Expect(state = Some(json("""{"approved":true}""")), visited = List("ok"))),
+        FlowTest("bad mock", mocks = Map("ok" -> json("""{"port":1}""")))
+      )
+      for {
+        _ <- app.save(approval.copy(tests = tests))
+        saved <- app.get("/api/flows/approval")
+        run <- app.post("/api/flows/approval/tests", json("{}"))
+        draft <- app.post("/api/flows/approval/tests", Json.obj("flow" -> approval.copy(tests = tests.take(1)).asJson))
+      } yield {
+        saved.json.hcursor.downField("flow").downField("tests").as[List[FlowTest]].orElse(saved.json.hcursor.downField("tests").as[List[FlowTest]]) shouldBe Right(tests)
+        run.status shouldBe Status.Ok
+        run.json.hcursor.get[Boolean]("passed") shouldBe Right(false)
+        val results = run.json.hcursor.downField("results").as[List[Json]].toOption.get
+        results.map(_.hcursor.get[Boolean]("passed").toOption.get) shouldBe List(true, false, false)
+        val problems = results(1).hcursor.get[List[String]]("problems").toOption.get
+        problems should contain("approved: expected true, found false")
+        problems should contain("node 'ok' did not run")
+        results(2).hcursor.get[List[String]]("problems").toOption.get.head should include("mock of 'ok'")
+        draft.json.hcursor.get[Boolean]("passed") shouldBe Right(true)
+      }
+    }
   }
 }

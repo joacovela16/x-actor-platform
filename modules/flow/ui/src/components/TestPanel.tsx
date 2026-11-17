@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 import { api } from '../api/client';
-import type { CatalogEntry, FlowDef, JsonValue, Mock, NodeMetrics, Trace, TraceStep } from '../api/types';
+import type { CatalogEntry, FlowDef, FlowTest, FlowTestResult, JsonValue, Mock, NodeMetrics, Trace, TraceStep } from '../api/types';
 import type { NodeShape } from '../hooks/usePorts';
 import { templateFromDecls } from '../graph/graph';
 import { useEntities } from '../hooks/useEntities';
@@ -9,7 +9,7 @@ import { JsonBox } from './JsonBox';
 import { ElementsEditor } from './ElementsEditor';
 import { Button } from '@/components/ui/button';
 import { SearchSelect } from '@/components/ui/search-select';
-import { Input } from '@/components/ui/input';
+import { Checkbox, Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -33,12 +33,14 @@ interface Props {
   shapes: Record<string, NodeShape>;
   trace: TraceView | null;
   onTrace: (t: TraceView | null) => void;
+  /** Cambia los casos de prueba que guarda el flujo (se guardan con él). */
+  onTestsChange?: (tests: FlowTest[]) => void;
 }
 
 const EMPTY_DRAFT: MockDraft = { mode: 'none', port: 'out', values: {}, elements: [], error: '' };
 
 /** Modo test: entradas, mocks por nodo y traza paso a paso (se pinta sobre el grafo). Usa el borrador, no hace falta guardar. */
-export function TestPanel({ flow, catalog, shapes, trace, onTrace }: Props) {
+export function TestPanel({ flow, catalog, shapes, trace, onTrace, onTestsChange }: Props) {
   const { toast } = useContext(AppContext);
   const { byName: entities } = useEntities();
   const [inputs, setInputs] = useState<JsonValue | undefined>(() => templateFromDecls(flow.inputs, entities));
@@ -46,11 +48,16 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace }: Props) {
   const [mocks, setMocks] = useState<Record<string, MockDraft>>({});
   const [busy, setBusy] = useState(false);
   const [raw, setRaw] = useState<Trace | null>(null);
+  const [caseName, setCaseName] = useState('');
+  const [checkState, setCheckState] = useState(true);
+  const [results, setResults] = useState<Record<string, FlowTestResult>>({});
+  const [running, setRunning] = useState(false);
+  const tests = flow.tests ?? [];
 
   const draftOf = (id: string): MockDraft => mocks[id] ?? EMPTY_DRAFT;
   const setDraft = (id: string, patch: Partial<MockDraft>) => setMocks((m) => ({ ...m, [id]: { ...draftOf(id), ...patch } }));
 
-  const run = async () => {
+  const mocksBody = (): Record<string, Mock> => {
     const body: Record<string, Mock> = {};
     for (const n of flow.nodes) {
       const d = draftOf(n.id);
@@ -62,6 +69,11 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace }: Props) {
         body[n.id] = { type: 'output', port: d.port, values };
       }
     }
+    return body;
+  };
+
+  const run = async () => {
+    const body = mocksBody();
     setBusy(true);
     try {
       const t = await api.simulate(flow.id, { flow, inputs: inputs ?? {}, mocks: body });
@@ -75,6 +87,51 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace }: Props) {
   };
 
   const step = trace?.steps[trace.index];
+
+  // Guarda lo que se acaba de probar como un caso del flujo: sus entradas, sus mocks y cómo terminó.
+  const saveCase = () => {
+    const name = caseName.trim();
+    if (!name || !raw || !onTestsChange) return;
+    const status = raw.status === 'failed' ? 'failed' : 'succeeded';
+    const test: FlowTest = {
+      name,
+      inputs: inputs ?? {},
+      mocks: mocksBody() as unknown as Record<string, JsonValue>,
+      expect: { status, ...(checkState && raw.state !== undefined ? { state: raw.state } : {}) },
+    };
+    onTestsChange([...tests.filter((t) => t.name !== name), test]);
+    setCaseName('');
+    toast(`Caso '${name}' guardado; se guarda con el flujo.`, 'ok');
+  };
+
+  // Carga un caso guardado en el panel, para verlo o cambiarlo.
+  const loadCase = (t: FlowTest) => {
+    setInputs(t.inputs);
+    const drafts: Record<string, MockDraft> = {};
+    for (const [id, m] of Object.entries(t.mocks) as Array<[string, Record<string, unknown>]>) {
+      if (m.type === 'fail' || typeof m.error === 'string') drafts[id] = { ...EMPTY_DRAFT, mode: 'error', error: String(m.error ?? '') };
+      else {
+        const values = (m.values ?? {}) as Record<string, JsonValue>;
+        const elements = Array.isArray(values.elements) ? (values.elements as JsonValue[]) : [];
+        drafts[id] = { ...EMPTY_DRAFT, mode: 'output', port: typeof m.port === 'string' ? m.port : 'out', values, elements };
+      }
+    }
+    setMocks(drafts);
+    setCaseName(t.name);
+  };
+
+  const runAll = async () => {
+    setRunning(true);
+    try {
+      const r = await api.runTests(flow.id, flow);
+      setResults(Object.fromEntries(r.results.map((x) => [x.name, x])));
+      toast(r.passed ? 'Todos los casos pasan.' : `${r.results.filter((x) => !x.passed).length} caso(s) fallan.`, r.passed ? 'ok' : 'error');
+    } catch (e) {
+      toast(`No se pudieron ejecutar los casos: ${(e as Error).message}`, 'error');
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div className="test-panel">
@@ -132,6 +189,53 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace }: Props) {
           );
         })}
         <Button type="button" disabled={!valid || busy} onClick={run}>Ejecutar prueba</Button>
+
+        {onTestsChange && (
+          <section className="mt-3 flex flex-col gap-2 border-t border-base-300 pt-3">
+            <h3>Casos de prueba</h3>
+            <p className="text-xs text-base-content/60">
+              Un caso guarda las entradas y los mocks de arriba y cómo terminó la prueba. Se guardan con el flujo y se pueden ejecutar todos
+              juntos (también desde CI: <span className="font-mono">POST /api/flows/{flow.id}/tests</span>).
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="min-w-40 flex-1" placeholder="nombre del caso" value={caseName} onChange={(e) => setCaseName(e.target.value)} aria-label="Nombre del caso" />
+              <Button type="button" variant="outline" disabled={!raw || !caseName.trim()} onClick={saveCase} title={raw ? undefined : 'Ejecuta la prueba primero'}>
+                Guardar como caso
+              </Button>
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox checked={checkState} onCheckedChange={setCheckState} /> Comprobar también el estado final
+            </label>
+            {tests.length === 0 && <p className="text-xs text-base-content/60">Este flujo no tiene casos todavía.</p>}
+            {tests.length > 0 && (
+              <>
+                <ul className="flex flex-col gap-1">
+                  {tests.map((t) => {
+                    const r = results[t.name];
+                    return (
+                      <li key={t.name} className="rounded-md bg-base-200 p-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          {r && <Badge variant={r.passed ? 'success' : 'destructive'}>{r.passed ? 'pasa' : 'falla'}</Badge>}
+                          <span className="flex-1 truncate font-mono">{t.name}</span>
+                          <Button type="button" variant="ghost" size="xs" onClick={() => loadCase(t)}>Cargar</Button>
+                          <Button type="button" variant="ghost" size="xs" className="text-error" onClick={() => onTestsChange(tests.filter((x) => x.name !== t.name))}>
+                            Borrar
+                          </Button>
+                        </div>
+                        {r && !r.passed && (
+                          <ul className="mt-1 list-disc pl-5 text-xs text-error">
+                            {r.problems.map((m, i) => <li key={i}>{m}</li>)}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <Button type="button" disabled={running} onClick={runAll}>{running ? 'Ejecutando…' : `Ejecutar los ${tests.length} casos`}</Button>
+              </>
+            )}
+          </section>
+        )}
       </div>
 
       <div className="run-col">

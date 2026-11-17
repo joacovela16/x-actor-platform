@@ -1,6 +1,6 @@
 import type {
   AuditTrail, CatalogEntry, Connection, ConnectionClient, ConnectionKind, Describe, Draft, EntityCheck, EntityDef, EntityError, FlowDef,
-  FlowError, FlowSummary, Instance, InstanceEvent, InstanceSummary, JsonValue, Mock, ScheduleView, Trace, Trigger, PluginStatus, BundlePlan, Health } from './types';
+  FlowError, FlowSummary, FlowTestResult, Instance, InstanceEvent, InstanceSummary, JsonValue, Mock, ScheduleView, Trace, Trigger, PluginStatus, BundlePlan, Health } from './types';
 import { normalizeInstanceSummary, normalizeTrail } from '../graph/audit';
 
 const BASE = '/api';
@@ -162,6 +162,9 @@ export const api = {
 
   simulate: (flowId: string, body: { flow: FlowDef; inputs: JsonValue; mocks: Record<string, Mock> }) =>
     request<Trace>('POST', `/flows/${enc(flowId)}/test`, body),
+
+  runTests: (flowId: string, flow: FlowDef) =>
+    request<{ passed: boolean; results: FlowTestResult[] }>('POST', `/flows/${enc(flowId)}/tests`, { flow }),
 
   listTriggers: () => request<Trigger[]>('GET', '/triggers'),
   getTrigger: (id: string) => request<Trigger>('GET', `/triggers/${enc(id)}`),

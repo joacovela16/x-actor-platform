@@ -82,6 +82,33 @@ export interface FlowDef {
   nodes: NodeDef[];
   edges: Edge[];
   layout?: Record<string, NodePosition>;
+  /** Casos de prueba que el flujo guarda consigo (`FlowTest`). */
+  tests?: FlowTest[];
+}
+
+/** Lo que tiene que cumplirse tras simular un caso de prueba. `state`: lo que el estado final debe contener. */
+export interface FlowTestExpect {
+  status?: 'succeeded' | 'failed';
+  state?: JsonValue;
+  visited?: string[];
+  notVisited?: string[];
+}
+
+/** `FlowTest`: entradas y mocks (como los manda el panel de pruebas) y lo que se espera. */
+export interface FlowTest {
+  name: string;
+  inputs: JsonValue;
+  mocks: Record<string, JsonValue>;
+  expect: FlowTestExpect;
+}
+
+/** Resultado de un caso en `POST /api/flows/{id}/tests`. */
+export interface FlowTestResult {
+  name: string;
+  passed: boolean;
+  problems: string[];
+  status: string;
+  state: JsonValue;
 }
 
 /** `GET /api/flows`: `FlowSummary(id, name, revision)` más `enabled` (el backend lo añade). */

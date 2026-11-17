@@ -611,6 +611,7 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
               shapes={shapes}
               trace={traceView}
               onTrace={setTraceView}
+              onTestsChange={readOnly ? undefined : (tests) => update((d) => ({ ...d, tests: tests.length ? tests : undefined }))}
             />
           )}
         </div>}

@@ -25,7 +25,8 @@ final case class FlowDef(
     outputs: List[OutputDecl] = Nil,
     revision: Int = 1,
     version: Int = FlowDef.CurrentVersion,
-    layout: Map[String, Position] = Map.empty
+    layout: Map[String, Position] = Map.empty,
+    tests: List[FlowTest] = Nil
 )
 
 object FlowDef {
@@ -37,10 +38,11 @@ object FlowDef {
       (f.version, f.id, f.name, f.revision, f.inputs, f.outputs, f.nodes, f.edges)
     )
 
-  /** The layout is written only when there is one. */
+  /** The layout and the tests are written only when there are some. */
   implicit val encoder: Encoder[FlowDef] = Encoder.instance { f =>
     val json = core(f)
-    if (f.layout.isEmpty) json else json.mapObject(_.add("layout", Encoder[Map[String, Position]].apply(f.layout)))
+    val withLayout = if (f.layout.isEmpty) json else json.mapObject(_.add("layout", Encoder[Map[String, Position]].apply(f.layout)))
+    if (f.tests.isEmpty) withLayout else withLayout.mapObject(_.add("tests", Encoder[List[FlowTest]].apply(f.tests)))
   }
 
   implicit val decoder: Decoder[FlowDef] = Decoder.instance { c =>
@@ -54,6 +56,7 @@ object FlowDef {
       nodes <- c.get[List[NodeDef]]("nodes")
       edges <- c.getOrElse[List[Edge]]("edges")(Nil)
       layout <- c.getOrElse[Map[String, Position]]("layout")(Map.empty)
-    } yield FlowDef(id, name, nodes, edges, inputs, outputs, revision, version, layout)
+      tests <- c.getOrElse[List[FlowTest]]("tests")(Nil)
+    } yield FlowDef(id, name, nodes, edges, inputs, outputs, revision, version, layout, tests)
   }
 }

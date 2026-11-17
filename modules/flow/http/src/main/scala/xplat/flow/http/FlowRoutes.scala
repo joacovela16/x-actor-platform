@@ -239,6 +239,19 @@ object FlowRoutes {
       case req @ POST -> Root / "api" / "flows" / id / "test" =>
         req.as[Json].flatMap(test(id, _))
 
+      // The tests the flow keeps: those of the draft in the body (`{"flow": ...}`), or of the saved flow. For the editor and for CI.
+      case req @ POST -> Root / "api" / "flows" / id / "tests" =>
+        req.as[Json].handleError(_ => Json.obj()).flatMap { body =>
+          body.hcursor.get[Option[FlowDef]]("flow").leftMap(_.message) match {
+            case Left(problem) => bad(problem)
+            case Right(draft) =>
+              draft.map(_.copy(id = id)).map(f => f.some.pure[F]).getOrElse(store.get(id, None)).flatMap {
+                case None       => notFound(s"flow '$id' does not exist")
+                case Some(flow) => FlowTests.run(engine, flow).flatMap(r => Ok(FlowTests.answer(r)))
+              }
+          }
+        }
+
       case req @ GET -> Root / "api" / "instances" => search(req)
 
       case GET -> Root / "api" / "instances" / id =>
