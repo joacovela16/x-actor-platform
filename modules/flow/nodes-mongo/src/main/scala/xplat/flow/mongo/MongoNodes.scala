@@ -4,6 +4,8 @@ import xplat.flow.nodes.ConnectionKind
 import cats.effect.{Async, Resource}
 import xplat.flow.model.NodeCatalog
 import xplat.flow.nodes.{Connections, NodeType}
+import xplat.flow.plugin.FlowPlugin
+import xplat.flow.stream.{StreamNodeType, StreamPlugin}
 
 /** The nodes that use MongoDB, to give to the engine as `extraNodes`:
   *
@@ -22,6 +24,11 @@ object MongoNodes {
 
   def nodes[F[_]](connections: Connections[F], pool: MongoPool[F])(implicit A: Async[F]): List[NodeType[F]] =
     List(new FindNode[F](connections, pool), new AggregateNode[F](connections, pool), new InsertNode[F](connections, pool), new UpdateNode[F](connections, pool), new DeleteNode[F](connections, pool))
+
+  /** The stream source of these nodes (MongoSource), for the plugin `stream`, on the clients of the server. */
+  val streamExtra: StreamPlugin.Extra = new StreamPlugin.Extra {
+    def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]] = List(new MongoSource[F](context.connections, MongoPool.on[F](context.clients)))
+  }
 
   def resource[F[_]](connections: Connections[F])(implicit A: Async[F]): Resource[F, List[NodeType[F]]] =
     MongoPool.make[F].map(pool => nodes[F](connections, pool))

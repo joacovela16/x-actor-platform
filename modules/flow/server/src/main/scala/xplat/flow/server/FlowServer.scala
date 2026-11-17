@@ -15,8 +15,8 @@ import xplat.flow.engine.{ActorFlowEngine, CorePlugin, CronScheduler, FlowMetric
 import xplat.flow.entity.{EntityCatalog, EntityDef}
 import xplat.flow.model.Types
 import xplat.flow.ai.{AiPlugin, Cassettes}
-import xplat.flow.db.DbPlugin
-import xplat.flow.mongo.MongoPlugin
+import xplat.flow.db.{DbNodes, DbPlugin}
+import xplat.flow.mongo.{MongoNodes, MongoPlugin}
 import xplat.flow.nodes.{ClientPool, Connections, EntityPlugin, FlowRunner, Traces}
 import xplat.flow.http._
 import xplat.flow.rest.HttpPlugin
@@ -47,7 +47,7 @@ object FlowServer {
       PluginLoader.Builtin(MongoPlugin.Name, new MongoPlugin),
       PluginLoader.Builtin(HttpPlugin.Name, new HttpPlugin),
       PluginLoader.Builtin(QueuePlugin.Name, new QueuePlugin),
-      PluginLoader.Builtin(StreamPlugin.Name, new StreamPlugin(extra = ScriptNodes.streamExtra)),
+      PluginLoader.Builtin(StreamPlugin.Name, new StreamPlugin(extra = StreamPlugin.Extra.all(ScriptNodes.streamExtra, MongoNodes.streamExtra, DbNodes.streamExtra))),
       PluginLoader.Builtin(AiPlugin.Name, new AiPlugin(cassettes))
     )
   }

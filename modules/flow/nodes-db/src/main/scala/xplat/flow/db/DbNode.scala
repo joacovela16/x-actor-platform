@@ -86,7 +86,7 @@ object DbNode {
       }
     }
 
-  private def readOnly(connection: Connection, kind: String, on: Boolean): Unit =
+  def readOnly(connection: Connection, kind: String, on: Boolean): Unit =
     if (kind == DbKinds.Sqlite) {
       // The JDBC flag cannot change on an open SQLite connection; `query_only` does the same.
       val st = connection.createStatement()
@@ -120,7 +120,7 @@ object DbNode {
       (if (withParams) Map("params" -> Json.fromValues(p.params)) else Map.empty)
 
   /** `text` without any of the secret values of the connection. */
-  private def clean(text: String, secrets: Map[String, String]): String =
+  private[db] def clean(text: String, secrets: Map[String, String]): String =
     secrets.values.filter(_.nonEmpty).foldLeft(text)((t, secret) => t.replace(secret, "***"))
 
   // ---- Reading the configuration ----

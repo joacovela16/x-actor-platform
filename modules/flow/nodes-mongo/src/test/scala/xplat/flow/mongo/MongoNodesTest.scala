@@ -2,7 +2,7 @@ package xplat.flow.mongo
 
 import cats.effect.testing.scalatest.AsyncIOSpec
 import cats.effect.unsafe.implicits.global
-import cats.effect.{IO, Resource}
+import cats.effect.{IO, Ref, Resource}
 import io.circe.Json
 import io.circe.parser.parse
 import org.scalatest.freespec.AsyncFreeSpec
@@ -11,6 +11,7 @@ import xplat.extensions.persistence.testkit.Containers
 import xplat.flow.nodes.Template
 import xplat.flow.model._
 import xplat.flow.nodes.{Connections, NodeType}
+import xplat.flow.stream.{NodeMetrics, StreamContext}
 
 import java.util.UUID
 
@@ -38,6 +39,16 @@ class MongoNodesTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     val update = new UpdateNode[IO](registry, pool)
     val delete = new DeleteNode[IO](registry, pool)
     def run(node: NodeType[IO], params: String, state: String = "{}", outputs: List[String] = Nil): IO[NodeOutput] = node.run(input(params, state, outputs))
+    val source = new MongoSource[IO](registry, pool)
+
+    /** The documents that the stream source gives, taking at most `take` of them. */
+    def stream(params: String, state: String = "{}", take: Long = Long.MaxValue): IO[List[Json]] =
+      for {
+        metrics <- NodeMetrics.make[IO]()
+        dead <- Ref.of[IO, Vector[Json]](Vector.empty)
+        ctx = new StreamContext[IO](NodeDef("s", MongoSource.Kind, json(params)), input(params, state), false, metrics, dead, IO.realTime.map(_.toMillis), 10)
+        docs <- source.open(ctx).take(take).map(_.value).compile.toList
+      } yield docs
   }
 
   /** A fresh database for each test, so they do not see each other's documents. */
@@ -180,6 +191,23 @@ class MongoNodesTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
         out.values("affected") shouldBe Json.fromInt(2)
         left.values("count") shouldBe Json.fromInt(1)
       }
+    }
+  }
+
+  "stream source" - {
+
+    "gives the documents that match, with values from the state, read in batches" in withMongo { env =>
+      for {
+        _ <- seed(env)
+        docs <- env.stream("""{"connection": "main", "collection": "users", "filter": {"active": "${state.on}"}, "sort": {"_id": 1}, "projection": {"name": 1}, "batchSize": 1}""", """{"on": true}""")
+      } yield docs shouldBe List(json("""{"_id": 1, "name": "Ana"}"""), json("""{"_id": 3, "name": "Eva"}"""))
+    }
+
+    "a stream that is cut early closes the cursor" in withMongo { env =>
+      for {
+        _ <- seed(env)
+        docs <- env.stream("""{"connection": "main", "collection": "users", "sort": {"_id": 1}}""", take = 2)
+      } yield docs.map(_.hcursor.get[Int]("_id").toOption.get) shouldBe List(1, 2)
     }
   }
 }

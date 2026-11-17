@@ -22,7 +22,7 @@ final class StreamPlugin(extra: StreamPlugin.Extra = StreamPlugin.Extra.none, se
           context.metrics,
           context.runner,
           settings,
-          extra[F],
+          extra[F](context),
           Some(context.traces)
         )
       )
@@ -32,14 +32,19 @@ final class StreamPlugin(extra: StreamPlugin.Extra = StreamPlugin.Extra.none, se
 object StreamPlugin {
   val Name: String = "stream"
 
-  /** Kinds of stream node for any effect. */
+  /** Kinds of stream node for any effect, made with what the server gives plugins (connections, clients...). */
   trait Extra {
-    def apply[F[_]: Async]: List[StreamNodeType[F]]
+    def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]]
   }
 
   object Extra {
     val none: Extra = new Extra {
-      def apply[F[_]: Async]: List[StreamNodeType[F]] = Nil
+      def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]] = Nil
+    }
+
+    /** The kinds of all of them. */
+    def all(extras: Extra*): Extra = new Extra {
+      def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]] = extras.toList.flatMap(_.apply[F](context))
     }
   }
 }

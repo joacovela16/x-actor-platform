@@ -402,7 +402,7 @@ lazy val flowNodesScala = (project in file("./modules/flow/nodes-scala"))
   * and doobie, with a connection pool for each named connection (`postgres`, `mariadb`, `sqlite`). Optional: the server adds them.
   */
 lazy val flowNodesDb = (project in file("./modules/flow/nodes-db"))
-  .dependsOn(flowHttp)
+  .dependsOn(flowHttp, flowNodesStream)
   .settings(
     name := "xplat-flow-nodes-db",
     commonsSettings,
@@ -420,7 +420,7 @@ lazy val flowNodesDb = (project in file("./modules/flow/nodes-db"))
   * connection read. Optional: the server adds them.
   */
 lazy val flowNodesMongo = (project in file("./modules/flow/nodes-mongo"))
-  .dependsOn(flowHttp, coreConnectors, persistenceTestkit % Test)
+  .dependsOn(flowHttp, flowNodesStream, coreConnectors, persistenceTestkit % Test)
   .settings(
     name := "xplat-flow-nodes-mongo",
     commonsSettings,

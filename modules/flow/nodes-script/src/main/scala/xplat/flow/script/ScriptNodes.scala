@@ -3,6 +3,7 @@ package xplat.flow.script
 import cats.effect.Async
 import xplat.flow.model.NodeCatalog
 import xplat.flow.nodes.NodeType
+import xplat.flow.plugin.FlowPlugin
 import xplat.flow.stream.{StreamNodeType, StreamPlugin}
 
 /** The nodes of the module, to give to the engine and to `StreamNodes`.
@@ -25,6 +26,6 @@ object ScriptNodes {
 
   /** `stream.script`, for the plugin `stream`. */
   val streamExtra: StreamPlugin.Extra = new StreamPlugin.Extra {
-    def apply[F[_]: Async]: List[StreamNodeType[F]] = streamNodes[F]()
+    def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]] = streamNodes[F]()
   }
 }

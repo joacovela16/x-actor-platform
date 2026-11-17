@@ -1,13 +1,14 @@
 package xplat.flow.db
 
 import cats.effect.testing.scalatest.AsyncIOSpec
-import cats.effect.{IO, Resource}
+import cats.effect.{IO, Ref, Resource}
 import io.circe.Json
 import io.circe.parser.parse
 import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
 import xplat.flow.model._
 import xplat.flow.nodes.{Connections, NodeType}
+import xplat.flow.stream.{NodeMetrics, StreamContext}
 
 import java.nio.file.{Files, Path}
 
@@ -27,6 +28,16 @@ class DbNodesTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
     val insert = new InsertNode[IO](registry, pool)
     val update = new UpdateNode[IO](registry, pool)
     val delete = new DeleteNode[IO](registry, pool)
+    val source = new DbSource[IO](registry, pool)
+
+    /** The rows that the stream source gives, taking at most `take` of them. */
+    def stream(params: String, state: String = "{}", take: Long = Long.MaxValue): IO[List[Json]] =
+      for {
+        metrics <- NodeMetrics.make[IO]()
+        dead <- Ref.of[IO, Vector[Json]](Vector.empty)
+        ctx = new StreamContext[IO](NodeDef("s", DbSource.Kind, json(params)), NodeInput(json(params), json(state), instanceId = "i1", nodeId = "s"), false, metrics, dead, IO.realTime.map(_.toMillis), 10)
+        rows <- source.open(ctx).take(take).map(_.value).compile.toList
+      } yield rows
 
     def run(node: NodeType[IO], params: String, state: String = "{}", outputs: List[String] = Nil): IO[NodeOutput] =
       node.run(NodeInput(json(params), json(state), instanceId = "i1", nodeId = "n1", outputs = outputs.map(n => OutputDecl(n, StatePath(List(n)), DataType.AnyJson))))
@@ -377,6 +388,34 @@ class DbNodesTest extends AsyncFreeSpec with AsyncIOSpec with Matchers {
           out.error.get should include("db.query on 'pg' failed")
         }
       }
+    }
+  }
+
+  "stream source" - {
+
+    "gives the rows of a SELECT one by one, with parameters from the state, in batches of fetchSize" in withEnv { env =>
+      for {
+        _ <- setup(env)
+        rows <- env.stream("""{"connection": "main", "sql": "SELECT id, name FROM users WHERE age > ? ORDER BY id", "params": [{"path": "min"}], "fetchSize": 1}""", """{"min": 20}""")
+      } yield rows shouldBe List(json("""{"id": 1, "name": "Ana"}"""), json("""{"id": 2, "name": "Luis"}"""), json("""{"id": 3, "name": "Eva"}"""))
+    }
+
+    "a stream that is cut early closes the query and gives the connection back" in withEnv { env =>
+      for {
+        _ <- setup(env)
+        first <- env.stream("""{"connection": "main", "sql": "SELECT id FROM users ORDER BY id"}""", take = 1)
+        // The connection went back to the pool in a usable state: it can write again.
+        out <- env.run(env.execute, """{"connection": "main", "sql": "DELETE FROM users WHERE id = 3"}""", outputs = List("affected"))
+      } yield {
+        first shouldBe List(json("""{"id": 1}"""))
+        out.failed shouldBe false
+        out.values("affected") shouldBe Json.fromInt(1)
+      }
+    }
+
+    "refuses a statement that writes, and a connection that does not exist" in withEnv { env =>
+      DbSource.descriptor.checkParams(json("""{"connection": "main", "sql": "DELETE FROM users"}""")) should not be empty
+      env.stream("""{"connection": "nope", "sql": "SELECT 1"}""").attempt.map(_.left.map(_.getMessage) shouldBe Left("the connection 'nope' does not exist"))
     }
   }
 }

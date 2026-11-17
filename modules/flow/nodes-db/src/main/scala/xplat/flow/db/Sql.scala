@@ -128,6 +128,21 @@ object Sql {
     } finally ps.close()
   }
 
+  /** The rows of a result as objects, one at a time, as they are read: for a stream, which reads as it is asked. */
+  def rowIterator(rs: ResultSet): Iterator[Json] = {
+    val meta = rs.getMetaData
+    val columns = (1 to meta.getColumnCount).map(i => (i, meta.getColumnLabel(i), meta.getColumnType(i), meta.getColumnTypeName(i))).toVector
+    new Iterator[Json] {
+      private var ready: Option[Boolean] = None
+      def hasNext: Boolean = ready.getOrElse { val r = rs.next(); ready = Some(r); r }
+      def next(): Json = {
+        if (!hasNext) throw new NoSuchElementException("no more rows")
+        ready = None
+        Json.fromFields(columns.map { case (i, label, tpe, name) => label -> value(rs, i, tpe, name) })
+      }
+    }
+  }
+
   private def readRows(rs: ResultSet, maxRows: Int): Rows = {
     val meta = rs.getMetaData
     val columns = (1 to meta.getColumnCount).map(i => (i, meta.getColumnLabel(i), meta.getColumnType(i), meta.getColumnTypeName(i))).toVector

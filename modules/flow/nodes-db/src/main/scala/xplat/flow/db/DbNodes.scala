@@ -4,6 +4,8 @@ import xplat.flow.nodes.ConnectionKind
 import cats.effect.{Async, Resource}
 import xplat.flow.model.NodeCatalog
 import xplat.flow.nodes.{Connections, NodeType}
+import xplat.flow.plugin.FlowPlugin
+import xplat.flow.stream.{StreamNodeType, StreamPlugin}
 
 /** The nodes that use databases, to give to the engine as `extraNodes`.
   *
@@ -24,6 +26,11 @@ object DbNodes {
 
   def nodes[F[_]](connections: Connections[F], pool: DbPool[F])(implicit A: Async[F]): List[NodeType[F]] =
     List(new QueryNode[F](connections, pool), new ExecuteNode[F](connections, pool), new InsertNode[F](connections, pool), new UpdateNode[F](connections, pool), new DeleteNode[F](connections, pool))
+
+  /** The stream source of these nodes (DbSource), for the plugin `stream`, on the clients of the server. */
+  val streamExtra: StreamPlugin.Extra = new StreamPlugin.Extra {
+    def apply[F[_]: Async](context: FlowPlugin.Context[F]): List[StreamNodeType[F]] = List(new DbSource[F](context.connections, DbPool.on[F](context.clients)))
+  }
 
   def resource[F[_]](connections: Connections[F])(implicit A: Async[F]): Resource[F, List[NodeType[F]]] =
     DbPool.make[F].map(pool => nodes[F](connections, pool))
