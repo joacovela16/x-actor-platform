@@ -52,6 +52,7 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace, onTestsChange
   const [checkState, setCheckState] = useState(true);
   const [results, setResults] = useState<Record<string, FlowTestResult>>({});
   const [running, setRunning] = useState(false);
+  const [stopAt, setStopAt] = useState('');
   const tests = flow.tests ?? [];
 
   const draftOf = (id: string): MockDraft => mocks[id] ?? EMPTY_DRAFT;
@@ -78,7 +79,10 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace, onTestsChange
     try {
       const t = await api.simulate(flow.id, { flow, inputs: inputs ?? {}, mocks: body });
       setRaw(t);
-      onTrace({ steps: t.steps ?? [], index: 0 });
+      // «Detenerse en»: la traza se abre en el paso de ese nodo, con el estado que había justo después.
+      const at = stopAt ? (t.steps ?? []).findIndex((s) => s.nodeId === stopAt) : -1;
+      if (stopAt && at < 0) toast(`El nodo '${stopAt}' no se alcanzó en esta prueba.`, 'error');
+      onTrace({ steps: t.steps ?? [], index: Math.max(0, at) });
     } catch (e) {
       toast(`La simulación falló: ${(e as Error).message}`, 'error');
     } finally {
@@ -188,6 +192,15 @@ export function TestPanel({ flow, catalog, shapes, trace, onTrace, onTestsChange
             </div>
           );
         })}
+        <label className="flex flex-col gap-1 text-xs text-base-content/70">
+          Detenerse en
+          <SearchSelect
+            aria-label="Detenerse en el nodo"
+            value={stopAt}
+            onChange={setStopAt}
+            options={[{ value: '', label: 'el principio de la traza' }, ...flow.nodes.map((n) => ({ value: n.id, label: n.id, hint: n.kind }))]}
+          />
+        </label>
         <Button type="button" disabled={!valid || busy} onClick={run}>Ejecutar prueba</Button>
 
         {onTestsChange && (

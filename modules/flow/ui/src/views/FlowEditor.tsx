@@ -14,6 +14,7 @@ import { useEntities } from '../hooks/useEntities';
 import { usePorts } from '../hooks/usePorts';
 import { AppContext } from '../App';
 import { elementPaths, inferElementTypes } from '../graph/elementTypes';
+import { History, copy, paste, splitEdge, type Clip } from '../graph/editing';
 import { declaredPaths, edgeKey, fallbackPosition, newNodeDef, wouldCreateCycle } from '../graph/graph';
 import { edgeProblem, findSegments, type EdgeProblem, type NodeIO } from '../graph/stream';
 import type { RunStatus } from '../components/RunPanel';
@@ -21,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ResizeHandle, usePanelWidth } from '../components/ResizeHandle';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Redo2, Undo2 } from 'lucide-react';
 import { Tabs } from '@/components/ui/tabs';
 
 const NO_ERRORS_BY_NODE: Record<string, string[]> = {};
@@ -29,6 +30,9 @@ const NO_EDGE_PROBLEMS: Record<string, string> = {};
 
 type BottomTab = 'errors' | 'run' | 'test';
 type RightTab = 'node' | 'flow' | 'schedule' | 'revisions';
+
+/** Lo copiado: vive mientras la página está abierta, así se puede pegar en otro flujo. */
+let clipboard: Clip | null = null;
 
 /**
  * Editor de un flujo: lienzo, paleta, propiedades, validación, programación, revisiones, ejecución y modo test.
@@ -106,6 +110,7 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
         if (!alive) return;
         const f = draft?.flow ?? flow;
         if (!f) throw new ApiError(404, null);
+        history.current.clear();
         setDoc(f);
         setSaved(JSON.stringify(f));
         setHasDraft(!!draft);
@@ -153,7 +158,83 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
 
   const segments = useMemo(() => (doc ? findSegments(doc.nodes, doc.edges, shapes as Record<string, NodeIO>) : []), [doc, shapes]);
 
-  const update = (fn: (d: FlowDef) => FlowDef) => setDoc((d) => (d ? fn(d) : d));
+  // Deshacer/rehacer: cada cambio guarda el documento de antes (los que llegan seguidos, como escribir, cuentan como uno).
+  const history = useRef(new History());
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const [, setHistoryTick] = useState(0);
+  const update = (fn: (d: FlowDef) => FlowDef) => {
+    const current = docRef.current;
+    if (!current) return;
+    const next = fn(current);
+    if (next === current) return;
+    history.current.record(current);
+    docRef.current = next;
+    setDoc(next);
+    setHistoryTick((t) => t + 1);
+  };
+  const undo = () => {
+    const prev = docRef.current && history.current.undo(docRef.current);
+    if (prev) {
+      docRef.current = prev;
+      setDoc(prev);
+      setHistoryTick((t) => t + 1);
+    }
+  };
+  const redo = () => {
+    const next = docRef.current && history.current.redo(docRef.current);
+    if (next) {
+      docRef.current = next;
+      setDoc(next);
+      setHistoryTick((t) => t + 1);
+    }
+  };
+
+  // Copiar y pegar: los nodos seleccionados en el lienzo (o el del panel), con las aristas entre ellos.
+  const [selection, setSelection] = useState<string[]>([]);
+  const copySelection = (): boolean => {
+    const ids = selection.length ? selection : selectedId ? [selectedId] : [];
+    const clip = docRef.current && copy(docRef.current, ids);
+    if (!clip) return false;
+    clipboard = clip;
+    toast(`${clip.nodes.length} nodo(s) copiado(s)`, 'ok');
+    return true;
+  };
+  const pasteClipboard = () => {
+    const clip = clipboard;
+    if (!clip || !docRef.current) return;
+    let ids: string[] = [];
+    update((d) => {
+      const r = paste(d, clip);
+      ids = r.ids;
+      return r.flow;
+    });
+    if (ids[0]) select(ids[0]);
+  };
+
+  // Atajos del lienzo. No actúan mientras se escribe en un campo o en un editor de código, que tienen su propio deshacer.
+  const keys = useRef({ undo, redo, copySelection, pasteClipboard });
+  keys.current = { undo, redo, copySelection, pasteClipboard };
+  useEffect(() => {
+    if (readOnly) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest('input, textarea, select, [contenteditable="true"], .monaco-editor, dialog') !== null)) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) keys.current.undo();
+      else if ((k === 'z' && e.shiftKey) || k === 'y') keys.current.redo();
+      else if (k === 'c') {
+        if (!keys.current.copySelection()) return;
+      } else if (k === 'v') keys.current.pasteClipboard();
+      else if (k === 'd') {
+        if (keys.current.copySelection()) keys.current.pasteClipboard();
+      } else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [readOnly]);
 
   const selectedNode: NodeDef | undefined = doc?.nodes.find((n) => n.id === selectedId);
 
@@ -214,13 +295,17 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
     return null;
   };
 
-  const addNode = (kind: string, at?: { x: number; y: number }) => {
+  /** Añade un nodo; si se soltó sobre una arista (`onEdge`), queda en medio de ella. */
+  const addNode = (kind: string, at?: { x: number; y: number }, onEdge?: string) => {
     if (!doc) return;
     const entry = catalog.find((c) => c.kind === kind);
     if (!entry) return;
     const node = newNodeDef(entry, doc.nodes);
     const pos = at ?? fallbackPosition(doc.nodes.length);
-    update((d) => ({ ...d, nodes: [...d.nodes, node], layout: { ...(d.layout ?? {}), [node.id]: pos } }));
+    update((d) => {
+      const added = { ...d, nodes: [...d.nodes, node], layout: { ...(d.layout ?? {}), [node.id]: pos } };
+      return onEdge ? splitEdge(added, onEdge, node, entry) : added;
+    });
     select(node.id);
   };
 
@@ -456,6 +541,12 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
             </>
           ) : (
             <>
+              <Button variant="ghost" type="button" onClick={undo} disabled={!history.current.canUndo} title="Deshacer (Ctrl+Z)" aria-label="Deshacer">
+                <Undo2 />
+              </Button>
+              <Button variant="ghost" type="button" onClick={redo} disabled={!history.current.canRedo} title="Rehacer (Ctrl+Shift+Z)" aria-label="Rehacer">
+                <Redo2 />
+              </Button>
               <Button variant="outline" type="button" onClick={save} disabled={saving || !dirty} title="Guarda sin validar; no cambia lo que corre">
                 Guardar borrador
               </Button>
@@ -508,6 +599,7 @@ export function FlowEditor({ flowId, rev }: { flowId: string; rev?: number }) {
           trace={trace}
           readOnly={readOnly}
           elementTypes={elementTypes}
+          onSelectionChange={setSelection}
           onSelect={select}
           onMove={moveNodes}
           onRemoveNodes={removeNodes}

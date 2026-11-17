@@ -317,7 +317,10 @@ interface Props {
   onRemoveEdges: (keys: string[]) => void;
   /** Devuelve un mensaje de error si la conexión no se puede añadir. `input` es la entrada del destino. */
   onConnect: (from: string, port: string, to: string, input: string) => string | null;
-  onAddNode: (kind: string, at: { x: number; y: number }) => void;
+  /** `onEdge`: la arista sobre la que se soltó el nodo, que queda partida por él. */
+  onAddNode: (kind: string, at: { x: number; y: number }, onEdge?: string) => void;
+  /** Los nodos seleccionados en el lienzo (varios con Shift o arrastrando un recuadro). */
+  onSelectionChange?: (ids: string[]) => void;
   onMessage: (msg: string) => void;
   /** Solo lectura (vista de auditoría): no se mueven, conectan ni borran nodos. */
   readOnly?: boolean;
@@ -488,7 +491,10 @@ function Board(p: Props) {
         e.preventDefault();
         const kind = e.dataTransfer.getData('application/x-flow-kind');
         if (!kind) return;
-        p.onAddNode(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        // Soltado sobre una arista: el nodo se pone en medio de ella.
+        const edgeEl = document.elementsFromPoint(e.clientX, e.clientY).map((el) => el.closest('.react-flow__edge')).find((el) => el !== null);
+        const edgeId = edgeEl?.getAttribute('data-id') ?? edgeEl?.getAttribute('data-testid')?.replace(/^rf__edge-/, '') ?? undefined;
+        p.onAddNode(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }), edgeId && p.flow.edges.some((x) => edgeKey(x) === edgeId) ? edgeId : undefined);
       }}
     >
       <ReactFlow<FNode, FEdge>
@@ -499,6 +505,7 @@ function Board(p: Props) {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onSelectionChange={({ nodes: sel }) => p.onSelectionChange?.(sel.map((n) => n.id))}
         onConnect={(c) => {
           if (!c.source || !c.target) return;
           const port = c.sourceHandle ?? 'out';

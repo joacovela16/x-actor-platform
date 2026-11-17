@@ -2,6 +2,8 @@ import { useContext, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { FlowSummary } from '../api/types';
 import { emptyFlow } from '../graph/graph';
+import { TEMPLATES } from '../graph/templates';
+import { SearchSelect } from '@/components/ui/search-select';
 import { AppContext } from '../App';
 import { Alert } from '@/components/ui/alert';
 import { Plus, Trash2 } from 'lucide-react';
@@ -23,6 +25,7 @@ export function FlowList() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [template, setTemplate] = useState('');
   const [toggling, setToggling] = useState<string | null>(null);
 
   const load = () =>
@@ -57,8 +60,14 @@ export function FlowList() {
     if (!ID_RE.test(id)) return toast('El id solo admite letras, números, guion y guion bajo.', 'error');
     setBusy(true);
     try {
-      const res = await api.saveFlow(emptyFlow(id, name || id));
-      if (!res.ok) return toast(res.errors.map((x) => x.message).join('; '), 'error');
+      const t = TEMPLATES.find((x) => x.key === template);
+      if (t) {
+        // Una plantilla nombra conexiones de ejemplo: se guarda como borrador, que no tiene que validar todavía.
+        await api.saveDraft(t.build(id, name || id));
+      } else {
+        const res = await api.saveFlow(emptyFlow(id, name || id));
+        if (!res.ok) return toast(res.errors.map((x) => x.message).join('; '), 'error');
+      }
       navigate(`#/flow/${encodeURIComponent(id)}`);
     } catch (err) {
       toast(`No se pudo crear: ${errorMessage(err)}`, 'error');
@@ -100,6 +109,15 @@ export function FlowList() {
             </FormField>
             <FormField label="Id">
               <Input className="font-mono" value={id} onChange={(e) => setId(e.target.value)} placeholder="order-approval" required />
+            </FormField>
+            <FormField label="Empezar desde">
+              <SearchSelect
+                aria-label="Plantilla"
+                value={template}
+                onChange={setTemplate}
+                options={[{ value: '', label: 'Flujo vacío' }, ...TEMPLATES.map((t) => ({ value: t.key, label: t.label, hint: t.description }))]}
+              />
+              {template && <p className="mt-1 text-xs text-base-content/60">{TEMPLATES.find((t) => t.key === template)?.description} Se crea como borrador: completa las conexiones antes de publicar.</p>}
             </FormField>
           </div>
         </Modal>
