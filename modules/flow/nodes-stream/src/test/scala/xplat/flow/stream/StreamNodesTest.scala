@@ -30,7 +30,7 @@ class StreamNodesTest extends AnyFreeSpec with Matchers {
     val roles = types.map(t => t.descriptor.kind -> ApiJson.role(t.descriptor, Json.obj())).toMap
     roles.filter(_._2 == "source").keySet shouldBe Set("stream.source.list", "stream.source.range", "stream.source.cron", "stream.source.queue")
     roles.filter(_._2 == "sink").keySet shouldBe Set("stream.sink.collect", "stream.sink.reduce", "stream.sink.flow", "stream.sink.publish", "stream.sink.http")
-    roles.filter(_._2 == "operator").keySet shouldBe Set("stream.map", "stream.filter", "stream.branch", "stream.take", "stream.drop", "stream.takeWhile", "stream.dropWhile", "stream.interruptAfter", "stream.scan", "stream.changes", "stream.zipWithIndex", "stream.zipWithPrevious", "stream.zipWithNext", "stream.groupAdjacentBy", "stream.flatMap", "stream.window", "stream.aggregate", "stream.dedupe", "stream.throttle", "stream.merge", "stream.zip", "stream.join")
+    roles.filter(_._2 == "operator").keySet shouldBe Set("stream.map", "stream.filter", "stream.branch", "stream.evalMap", "stream.take", "stream.drop", "stream.takeWhile", "stream.dropWhile", "stream.interruptAfter", "stream.scan", "stream.changes", "stream.zipWithIndex", "stream.zipWithPrevious", "stream.zipWithNext", "stream.groupAdjacentBy", "stream.flatMap", "stream.window", "stream.aggregate", "stream.dedupe", "stream.throttle", "stream.merge", "stream.zip", "stream.join")
     types.foreach { t =>
       (t, t.descriptor.category) match {
         case (_: StreamSource[IO], c)   => c shouldBe StreamPorts.SourceCategory

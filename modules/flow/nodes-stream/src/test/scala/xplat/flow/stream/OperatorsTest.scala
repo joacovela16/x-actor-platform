@@ -4,6 +4,7 @@ import cats.effect.testkit.TestControl
 import cats.effect.{IO, Ref}
 import fs2.Stream
 import io.circe.Json
+import xplat.flow.nodes.FlowRunner
 
 import scala.concurrent.duration._
 
@@ -242,6 +243,44 @@ class OperatorsTest extends StreamSpec {
         d.isSink(Json.obj()) shouldBe false
       }
       succeed
+    }
+  }
+
+  "evalMap" - {
+    /** Answers {"double": n * 2} for the input n, and fails for the ones in `fail`. Slower for small n, to test the order. */
+    final class Runner(fail: Set[Int]) extends FlowRunner[IO] {
+      def run(flowId: String, revision: Option[Int], inputs: Map[String, Json], wait: Boolean, caller: FlowRunner.Caller): IO[FlowRunner.Result] = {
+        val n = inputs.get("n").flatMap(_.asNumber).flatMap(_.toInt).getOrElse(0)
+        IO.sleep(((10 - n) * 30).millis) >> IO.pure {
+          if (fail(n)) FlowRunner.Failed("no way") else FlowRunner.Finished(Map("double" -> Json.fromInt(n * 2)))
+        }
+      }
+    }
+
+    "replaces each element by the outputs of the flow, in order, also with several at once" in {
+      for {
+        one <- runOperator(new EvalMapOp[IO](new Runner(Set.empty)), EvalMapOp.Kind, json("""{"flowId": "c", "inputs": {"n": "$"}}"""), plain(numbers(1, 2, 3): _*))
+        par <- runOperator(new EvalMapOp[IO](new Runner(Set.empty)), EvalMapOp.Kind, json("""{"flowId": "c", "inputs": {"n": "$"}, "parallel": 3}"""), plain(numbers(1, 2, 3): _*))
+      } yield {
+        one._1 shouldBe List(json("""{"double":2}"""), json("""{"double":4}"""), json("""{"double":6}"""))
+        par._1 shouldBe one._1
+      }
+    }
+
+    "with into, sets the outputs inside the element; a flow that fails makes a dead letter" in {
+      for {
+        r <- runOperator(new EvalMapOp[IO](new Runner(Set(2))), EvalMapOp.Kind, json("""{"flowId": "c", "inputs": {"n": "id"}, "into": "lookup"}"""), plain(json("""{"id": 1}"""), json("""{"id": 2}""")))
+        dead <- r._2.dead.get
+      } yield {
+        r._1 shouldBe List(json("""{"id": 1, "lookup": {"double": 2}}"""))
+        dead.size shouldBe 1
+        dead.head.hcursor.get[String]("error").toOption.get should include("no way")
+      }
+    }
+
+    "unordered, the elements leave as their flows end" in {
+      runOperator(new EvalMapOp[IO](new Runner(Set.empty)), EvalMapOp.Kind, json("""{"flowId": "c", "inputs": {"n": "$"}, "parallel": 3, "ordered": false}"""), plain(numbers(1, 2, 3): _*))
+        .map(_._1 shouldBe List(json("""{"double":6}"""), json("""{"double":4}"""), json("""{"double":2}""")))
     }
   }
 }
